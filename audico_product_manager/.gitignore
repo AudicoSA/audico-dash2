@@ -1,0 +1,147 @@
+# ===============================
+# Node.js / Next.js
+# ===============================
+
+# Node modules
+node_modules/
+
+# Next.js build output
+.next/
+out/
+dist/
+build/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# dotenv environment variables
+.env
+.env.*.local
+
+# MacOS
+.DS_Store
+
+# ===============================
+# Python / Flask
+# ===============================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+env/
+venv/
+.venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+pip-wheel-metadata/
+share/python-wheels/
+
+# Virtual environment
+ENV/
+env.bak/
+venv.bak/
+
+# Pytest
+.pytest_cache/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff (if any)
+*.log
+local_settings.py
+
+# Flask instance folder
+instance/
+
+# Scrapy stuff (if any)
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# VS Code workspace settings
+.vscode/
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+.idea/**
+
+# ===============================
+# Miscellaneous
+# ===============================
+
+# OS files
+Thumbs.db
+ehthumbs.db
+
+# IDE files
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# Temporary files
+*.swp
+*.lock
+*.tmp
+*.temp
+*.bak
+*.orig
+
+# Coverage / test results
+coverage/
+
+# Yarn PnP
+.pnp.*
+.yarn/*
+
+# JetBrains
+*.iws
+*.iml
+*.ipr
+
+# React Native / Expo
+.expo/
+audico-pricelists-d6dcac3f7c31.json

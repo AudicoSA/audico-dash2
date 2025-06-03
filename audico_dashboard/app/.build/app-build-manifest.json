@@ -1,0 +1,88 @@
+{
+  "pages": {
+    "/_not-found/page": [
+      "static/chunks/webpack-750ad1fa883dbe57.js",
+      "static/chunks/a0b5f63a-e697236694f19f4b.js",
+      "static/chunks/275-a9b37049426a68c6.js",
+      "static/chunks/main-app-d0d96f5b0c3fc738.js",
+      "static/chunks/app/_not-found/page-0e83d0750e720c59.js"
+    ],
+    "/layout": [
+      "static/chunks/webpack-750ad1fa883dbe57.js",
+      "static/chunks/a0b5f63a-e697236694f19f4b.js",
+      "static/chunks/275-a9b37049426a68c6.js",
+      "static/chunks/main-app-d0d96f5b0c3fc738.js",
+      "static/css/0fe32310904e7b17.css",
+      "static/chunks/813-9b3387f9c59a687a.js",
+      "static/chunks/794-e665e1b27db6070d.js",
+      "static/chunks/574-1d7ebcef37136329.js",
+      "static/chunks/app/layout-bbe586ade9fe5c2b.js"
+    ],
+    "/configuration/page": [
+      "static/chunks/webpack-750ad1fa883dbe57.js",
+      "static/chunks/a0b5f63a-e697236694f19f4b.js",
+      "static/chunks/275-a9b37049426a68c6.js",
+      "static/chunks/main-app-d0d96f5b0c3fc738.js",
+      "static/chunks/813-9b3387f9c59a687a.js",
+      "static/chunks/638-a1e6fb57bb9a55a0.js",
+      "static/chunks/212-aba92f0d149b950e.js",
+      "static/chunks/app/configuration/page-c1030991a679b4ed.js"
+    ],
+    "/opencart-integration/page": [
+      "static/chunks/webpack-750ad1fa883dbe57.js",
+      "static/chunks/a0b5f63a-e697236694f19f4b.js",
+      "static/chunks/275-a9b37049426a68c6.js",
+      "static/chunks/main-app-d0d96f5b0c3fc738.js",
+      "static/chunks/813-9b3387f9c59a687a.js",
+      "static/chunks/638-a1e6fb57bb9a55a0.js",
+      "static/chunks/212-aba92f0d149b950e.js",
+      "static/chunks/app/opencart-integration/page-c6e7f35f92f959f7.js"
+    ],
+    "/page": [
+      "static/chunks/webpack-750ad1fa883dbe57.js",
+      "static/chunks/a0b5f63a-e697236694f19f4b.js",
+      "static/chunks/275-a9b37049426a68c6.js",
+      "static/chunks/main-app-d0d96f5b0c3fc738.js",
+      "static/chunks/813-9b3387f9c59a687a.js",
+      "static/chunks/794-e665e1b27db6070d.js",
+      "static/chunks/app/page-cc5499b0dc50a5ab.js"
+    ],
+    "/dry-run/page": [
+      "static/chunks/webpack-750ad1fa883dbe57.js",
+      "static/chunks/a0b5f63a-e697236694f19f4b.js",
+      "static/chunks/275-a9b37049426a68c6.js",
+      "static/chunks/main-app-d0d96f5b0c3fc738.js",
+      "static/chunks/813-9b3387f9c59a687a.js",
+      "static/chunks/198-80b9a9da389b6cbe.js",
+      "static/chunks/102-ae24d1585303dd36.js",
+      "static/chunks/app/dry-run/page-eae9e708cf9903ac.js"
+    ],
+    "/pricelist-testing/page": [
+      "static/chunks/webpack-750ad1fa883dbe57.js",
+      "static/chunks/a0b5f63a-e697236694f19f4b.js",
+      "static/chunks/275-a9b37049426a68c6.js",
+      "static/chunks/main-app-d0d96f5b0c3fc738.js",
+      "static/chunks/813-9b3387f9c59a687a.js",
+      "static/chunks/638-a1e6fb57bb9a55a0.js",
+      "static/chunks/app/pricelist-testing/page-776efdf0f882a385.js"
+    ],
+    "/product-comparison/page": [
+      "static/chunks/webpack-750ad1fa883dbe57.js",
+      "static/chunks/a0b5f63a-e697236694f19f4b.js",
+      "static/chunks/275-a9b37049426a68c6.js",
+      "static/chunks/main-app-d0d96f5b0c3fc738.js",
+      "static/chunks/813-9b3387f9c59a687a.js",
+      "static/chunks/app/product-comparison/page-b4b87369d01d5cbc.js"
+    ],
+    "/system-monitor/page": [
+      "static/chunks/webpack-750ad1fa883dbe57.js",
+      "static/chunks/a0b5f63a-e697236694f19f4b.js",
+      "static/chunks/275-a9b37049426a68c6.js",
+      "static/chunks/main-app-d0d96f5b0c3fc738.js",
+      "static/chunks/813-9b3387f9c59a687a.js",
+      "static/chunks/638-a1e6fb57bb9a55a0.js",
+      "static/chunks/198-80b9a9da389b6cbe.js",
+      "static/chunks/app/system-monitor/page-80a4a062e1e0def0.js"
+    ]
+  }
+}

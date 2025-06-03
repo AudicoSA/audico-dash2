@@ -1,0 +1,49 @@
+const API_BASE_URL = 'http://localhost:5000/api';
+
+export class OpenCartAPI {
+  static async testConnection() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/test-connection`);
+      return await response.json();
+    } catch (error) {
+      return { status: 'error', message: 'Backend not connected' };
+    }
+  }
+
+  static async fetchCategories() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/get-categories`);
+      return await response.json();
+    } catch (error) {
+      return { status: 'error', categories: [] };
+    }
+  }
+
+  static async createProduct(productData: any) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/create-product`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(productData)
+      });
+      return await response.json();
+    } catch (error) {
+      return { status: 'error', message: 'Failed to create product' };
+    }
+  }
+
+  static async processPricelist(file: File) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch(`${API_BASE_URL}/process-pricelist`, {
+        method: 'POST',
+        body: formData
+      });
+      return await response.json();
+    } catch (error) {
+      return { status: 'error', message: 'Failed to process file' };
+    }
+  }
+}

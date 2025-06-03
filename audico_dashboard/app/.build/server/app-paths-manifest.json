@@ -1,0 +1,10 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/configuration/page": "app/configuration/page.js",
+  "/opencart-integration/page": "app/opencart-integration/page.js",
+  "/page": "app/page.js",
+  "/dry-run/page": "app/dry-run/page.js",
+  "/pricelist-testing/page": "app/pricelist-testing/page.js",
+  "/product-comparison/page": "app/product-comparison/page.js",
+  "/system-monitor/page": "app/system-monitor/page.js"
+}
