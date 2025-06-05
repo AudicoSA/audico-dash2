@@ -1,387 +1,468 @@
 
 """
-OpenCart REST API client for product management.
+OpenCart API Client for Audico Product Manager.
 
-Provides functionality to interact with OpenCart's custom REST API for
-listing, creating, and updating products.
+This module provides a client for interacting with the OpenCart REST API,
+including authentication, product management, and category operations.
 """
 
-import logging
 import requests
 import json
-import time
+import logging
 from typing import List, Dict, Any, Optional, Tuple
 from urllib.parse import urljoin, urlencode
 import base64
+from dotenv import load_dotenv
 
-from .config import config
+# Use absolute import that works when running directly
+try:
+    from audico_product_manager.config import config
+except ImportError:
+    try:
+        from .config import config
+    except ImportError:
+        from config import config
 
-logger = logging.getLogger(__name__)
+# Load environment variables
+load_dotenv()
 
 class OpenCartProduct:
-    """Data class for OpenCart product information."""
+    """Represents a product in OpenCart with all necessary attributes."""
     
-    def __init__(self, product_data: Dict[str, Any]):
-        """Initialize from OpenCart API response data."""
-        self.product_id = product_data.get('product_id')
-        self.name = product_data.get('name', '')
-        self.model = product_data.get('model', '')
-        self.sku = product_data.get('sku', '')
-        self.price = product_data.get('price', '0')
-        self.description = product_data.get('description', '')
-        self.category_id = product_data.get('category_id')
-        self.manufacturer_id = product_data.get('manufacturer_id')
-        self.status = product_data.get('status', '1')
-        self.stock_status_id = product_data.get('stock_status_id', '7')
-        self.quantity = product_data.get('quantity', '0')
-        self.image = product_data.get('image', '')
-        self.date_added = product_data.get('date_added')
-        self.date_modified = product_data.get('date_modified')
-        self.raw_data = product_data
+    def __init__(self, name: str, model: str, price: float, **kwargs):
+        """
+        Initialize an OpenCart product.
+        
+        Args:
+            name: Product name
+            model: Product model/SKU
+            price: Product price
+            **kwargs: Additional product attributes
+        """
+        self.name = name
+        self.model = model
+        self.price = price
+        
+        # Optional attributes with defaults
+        self.description = kwargs.get('description', '')
+        self.meta_title = kwargs.get('meta_title', name)
+        self.meta_description = kwargs.get('meta_description', '')
+        self.meta_keyword = kwargs.get('meta_keyword', '')
+        self.tag = kwargs.get('tag', '')
+        self.sku = kwargs.get('sku', model)
+        self.upc = kwargs.get('upc', '')
+        self.ean = kwargs.get('ean', '')
+        self.jan = kwargs.get('jan', '')
+        self.isbn = kwargs.get('isbn', '')
+        self.mpn = kwargs.get('mpn', '')
+        self.location = kwargs.get('location', '')
+        self.quantity = kwargs.get('quantity', 100)
+        self.minimum = kwargs.get('minimum', 1)
+        self.subtract = kwargs.get('subtract', 1)
+        self.stock_status_id = kwargs.get('stock_status_id', 7)  # In Stock
+        self.date_available = kwargs.get('date_available', '2023-01-01')
+        self.manufacturer_id = kwargs.get('manufacturer_id', 0)
+        self.shipping = kwargs.get('shipping', 1)
+        self.points = kwargs.get('points', 0)
+        self.tax_class_id = kwargs.get('tax_class_id', 0)
+        self.weight = kwargs.get('weight', 0.0)
+        self.weight_class_id = kwargs.get('weight_class_id', 1)
+        self.length = kwargs.get('length', 0.0)
+        self.width = kwargs.get('width', 0.0)
+        self.height = kwargs.get('height', 0.0)
+        self.length_class_id = kwargs.get('length_class_id', 1)
+        self.status = kwargs.get('status', 1)  # Enabled
+        self.sort_order = kwargs.get('sort_order', 0)
+        self.image = kwargs.get('image', '')
+        
+        # Categories (list of category IDs)
+        self.categories = kwargs.get('categories', [])
+        
+        # Additional images
+        self.images = kwargs.get('images', [])
+        
+        # Product options
+        self.options = kwargs.get('options', [])
+        
+        # Product attributes
+        self.attributes = kwargs.get('attributes', [])
+        
+        # SEO URL
+        self.seo_url = kwargs.get('seo_url', '')
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for API requests."""
-        return {
+        """Convert the product to a dictionary for API submission."""
+        product_data = {
             'name': self.name,
             'model': self.model,
-            'sku': self.sku,
-            'price': self.price,
+            'price': str(self.price),
             'description': self.description,
-            'category_id': self.category_id,
-            'manufacturer_id': self.manufacturer_id,
-            'status': self.status,
-            'stock_status_id': self.stock_status_id,
-            'quantity': self.quantity,
-            'image': self.image
+            'meta_title': self.meta_title,
+            'meta_description': self.meta_description,
+            'meta_keyword': self.meta_keyword,
+            'tag': self.tag,
+            'sku': self.sku,
+            'upc': self.upc,
+            'ean': self.ean,
+            'jan': self.jan,
+            'isbn': self.isbn,
+            'mpn': self.mpn,
+            'location': self.location,
+            'quantity': str(self.quantity),
+            'minimum': str(self.minimum),
+            'subtract': str(self.subtract),
+            'stock_status_id': str(self.stock_status_id),
+            'date_available': self.date_available,
+            'manufacturer_id': str(self.manufacturer_id),
+            'shipping': str(self.shipping),
+            'points': str(self.points),
+            'tax_class_id': str(self.tax_class_id),
+            'weight': str(self.weight),
+            'weight_class_id': str(self.weight_class_id),
+            'length': str(self.length),
+            'width': str(self.width),
+            'height': str(self.height),
+            'length_class_id': str(self.length_class_id),
+            'status': str(self.status),
+            'sort_order': str(self.sort_order),
+            'image': self.image,
         }
+        
+        # Add categories if specified
+        if self.categories:
+            product_data['product_category'] = self.categories
+        
+        # Add additional images if specified
+        if self.images:
+            product_data['product_image'] = self.images
+        
+        # Add options if specified
+        if self.options:
+            product_data['product_option'] = self.options
+        
+        # Add attributes if specified
+        if self.attributes:
+            product_data['product_attribute'] = self.attributes
+        
+        # Add SEO URL if specified
+        if self.seo_url:
+            product_data['product_seo_url'] = [{'language_id': '1', 'keyword': self.seo_url}]
+        
+        return product_data
+
 
 class OpenCartAPIClient:
-    """OpenCart REST API client for product management."""
+    """Client for interacting with OpenCart REST API."""
     
-    def __init__(self):
-        """Initialize OpenCart API client with authentication."""
-        self.base_url = config.opencart_base_url
-        self.auth_token = config.opencart_auth_token
+    def __init__(self, base_url: Optional[str] = None, auth_token: Optional[str] = None):
+        """
+        Initialize the OpenCart API client.
+        
+        Args:
+            base_url: OpenCart API base URL
+            auth_token: Authentication token for API access
+        """
+        self.base_url = base_url or config.opencart_base_url
+        self.auth_token = auth_token or config.opencart_auth_token
         self.session = requests.Session()
         
-        # Set up authentication headers
-        self.session.headers.update({
+        # Set up logging
+        self.logger = logging.getLogger(__name__)
+        
+        # Set up Basic Auth headers
+        self.headers = {
             'Authorization': f'Basic {self.auth_token}',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        })
-        
-        # Set up retry configuration
-        self.max_retries = config.max_retries
-        self.retry_delay = config.retry_delay
-        
-        logger.info("Initialized OpenCart API client")
+            'Content-Type': 'application/json'
+        }
     
-    def _make_request(self, method: str, endpoint: str, params: Dict = None, 
-                     data: Dict = None) -> Tuple[bool, Dict]:
+    def search_products(self, search_term: str) -> Optional[List[Dict]]:
         """
-        Make HTTP request to OpenCart API with retry logic.
+        Search for products using the OpenCart API.
+        
+        Args:
+            search_term: Product name or model to search for
+            
+        Returns:
+            List[Dict]: List of matching products or None if request failed
+        """
+        try:
+            # Use the specific endpoint format for audicoonline.co.za
+            url = f"https://www.audicoonline.co.za/index.php?route=ocrestapi/product/listing&search={search_term}"
+            
+            self.logger.info(f"Searching for products with term: {search_term}")
+            response = self.session.get(url, headers=self.headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                # Extract products from the nested response structure
+                if 'data' in data and 'products' in data['data']:
+                    products = data['data']['products']
+                    self.logger.info(f"Successfully retrieved {len(products)} products")
+                    return products
+                else:
+                    self.logger.warning(f"Unexpected response structure: {list(data.keys())}")
+                    return []
+            else:
+                self.logger.error(f"Product search failed: {response.status_code} - {response.text}")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Product search error: {str(e)}")
+            return None
+    
+    def _make_request(self, method: str, endpoint: str, data: Optional[Dict] = None, 
+                     params: Optional[Dict] = None) -> Optional[Dict]:
+        """
+        Make an authenticated request to the OpenCart API.
         
         Args:
             method: HTTP method (GET, POST, PUT, DELETE)
             endpoint: API endpoint
-            params: URL parameters
-            data: Request body data
+            data: Request data for POST/PUT requests
+            params: Query parameters
             
         Returns:
-            Tuple of (success, response_data)
+            Dict: Response data or None if request failed
         """
         url = urljoin(self.base_url, endpoint)
         
-        for attempt in range(self.max_retries + 1):
-            try:
-                if method.upper() == 'GET':
-                    response = self.session.get(url, params=params, timeout=30)
-                elif method.upper() == 'POST':
-                    response = self.session.post(url, params=params, json=data, timeout=30)
-                elif method.upper() == 'PUT':
-                    response = self.session.put(url, params=params, json=data, timeout=30)
-                elif method.upper() == 'DELETE':
-                    response = self.session.delete(url, params=params, timeout=30)
-                else:
-                    raise ValueError(f"Unsupported HTTP method: {method}")
-                
-                # Check response status
-                if response.status_code == 200:
-                    try:
-                        return True, response.json()
-                    except json.JSONDecodeError:
-                        logger.warning(f"Invalid JSON response from {url}")
-                        return True, {'message': response.text}
-                
-                elif response.status_code == 401:
-                    logger.error("Authentication failed - check API token")
-                    return False, {'error': 'Authentication failed'}
-                
-                elif response.status_code == 404:
-                    logger.warning(f"Endpoint not found: {url}")
-                    return False, {'error': 'Endpoint not found'}
-                
-                elif response.status_code >= 500:
-                    logger.warning(f"Server error {response.status_code}, attempt {attempt + 1}")
-                    if attempt < self.max_retries:
-                        time.sleep(self.retry_delay)
-                        continue
-                    return False, {'error': f'Server error: {response.status_code}'}
-                
-                else:
-                    logger.warning(f"Unexpected status code {response.status_code}: {response.text}")
-                    return False, {'error': f'HTTP {response.status_code}: {response.text}'}
-                
-            except requests.exceptions.Timeout:
-                logger.warning(f"Request timeout, attempt {attempt + 1}")
-                if attempt < self.max_retries:
-                    time.sleep(self.retry_delay)
-                    continue
-                return False, {'error': 'Request timeout'}
+        try:
+            if method.upper() == 'GET':
+                response = self.session.get(url, headers=self.headers, params=params)
+            elif method.upper() == 'POST':
+                response = self.session.post(url, headers=self.headers, json=data)
+            elif method.upper() == 'PUT':
+                response = self.session.put(url, headers=self.headers, json=data)
+            elif method.upper() == 'DELETE':
+                response = self.session.delete(url, headers=self.headers)
+            else:
+                self.logger.error(f"Unsupported HTTP method: {method}")
+                return None
             
-            except requests.exceptions.ConnectionError:
-                logger.warning(f"Connection error, attempt {attempt + 1}")
-                if attempt < self.max_retries:
-                    time.sleep(self.retry_delay)
-                    continue
-                return False, {'error': 'Connection error'}
-            
-            except Exception as e:
-                logger.error(f"Unexpected error in API request: {e}")
-                return False, {'error': str(e)}
-        
-        return False, {'error': 'Max retries exceeded'}
+            if response.status_code in [200, 201]:
+                return response.json()
+            else:
+                self.logger.error(f"API request failed: {response.status_code} - {response.text}")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Request error: {str(e)}")
+            return None
     
-    def search_products(self, search_term: str = "", limit: int = 100, 
-                       page: int = 1) -> Tuple[bool, List[OpenCartProduct]]:
+    def get_categories(self) -> Optional[List[Dict]]:
         """
-        Search for products in OpenCart.
+        Retrieve all categories from OpenCart.
+        
+        Returns:
+            List[Dict]: List of categories or None if request failed
+        """
+        response = self._make_request('GET', '/categories')
+        if response and 'data' in response:
+            return response['data']
+        return None
+    
+    def get_category_by_name(self, name: str) -> Optional[Dict]:
+        """
+        Find a category by name.
         
         Args:
-            search_term: Product name or search term
-            limit: Maximum number of results
-            page: Page number for pagination
+            name: Category name to search for
             
         Returns:
-            Tuple of (success, list_of_products)
+            Dict: Category data or None if not found
         """
-        params = {
-            'limit': limit,
-            'page': page
+        categories = self.get_categories()
+        if categories:
+            for category in categories:
+                if category.get('name', '').lower() == name.lower():
+                    return category
+        return None
+    
+    def create_category(self, name: str, description: str = '', parent_id: int = 0) -> Optional[Dict]:
+        """
+        Create a new category in OpenCart.
+        
+        Args:
+            name: Category name
+            description: Category description
+            parent_id: Parent category ID (0 for top-level)
+            
+        Returns:
+            Dict: Created category data or None if creation failed
+        """
+        category_data = {
+            'name': name,
+            'description': description,
+            'parent_id': str(parent_id),
+            'status': '1',
+            'sort_order': '0'
         }
         
-        if search_term:
-            params['search'] = search_term
-        
-        success, response_data = self._make_request('GET', '/listing', params=params)
-        
-        if not success:
-            return False, []
-        
-        products = []
-        if 'data' in response_data and isinstance(response_data['data'], list):
-            for product_data in response_data['data']:
-                products.append(OpenCartProduct(product_data))
-        elif isinstance(response_data, list):
-            for product_data in response_data:
-                products.append(OpenCartProduct(product_data))
-        
-        logger.info(f"Found {len(products)} products for search: '{search_term}'")
-        return True, products
+        return self._make_request('POST', '/categories', data=category_data)
     
-    def get_product_by_id(self, product_id: str) -> Tuple[bool, Optional[OpenCartProduct]]:
+    def get_products(self, search_term: str = "", limit: int = 100, page: int = 1) -> Optional[List[Dict]]:
         """
-        Get a specific product by ID.
+        Retrieve products from OpenCart using search.
         
         Args:
-            product_id: OpenCart product ID
+            search_term: Search term for products (empty string returns all)
+            limit: Number of products to return
+            page: Page number (for compatibility, not used in current implementation)
             
         Returns:
-            Tuple of (success, product_or_none)
+            List[Dict]: List of products or None if request failed
         """
-        success, response_data = self._make_request('GET', f'/{product_id}')
-        
-        if not success:
-            return False, None
-        
-        if 'data' in response_data:
-            return True, OpenCartProduct(response_data['data'])
-        elif 'product_id' in response_data:
-            return True, OpenCartProduct(response_data)
-        
-        return False, None
+        return self.search_products(search_term)
     
-    def get_product_by_name(self, product_name: str) -> Tuple[bool, Optional[OpenCartProduct]]:
+    def get_product_by_model(self, model: str) -> Optional[Dict]:
         """
-        Get a product by exact name match.
+        Find a product by model/SKU.
         
         Args:
-            product_name: Exact product name to search for
+            model: Product model/SKU to search for
             
         Returns:
-            Tuple of (success, product_or_none)
+            Dict: Product data or None if not found
         """
-        success, products = self.search_products(search_term=product_name)
-        
-        if not success:
-            return False, None
-        
-        # Look for exact name match
-        for product in products:
-            if product.name.lower().strip() == product_name.lower().strip():
-                return True, product
-        
-        return True, None  # No exact match found
+        # Search for products using the model as search term
+        products = self.search_products(model)
+        if products:
+            # Look for exact model match first
+            for product in products:
+                if product.get('model', '').lower() == model.lower():
+                    return product
+            # If no exact match, return the first result
+            return products[0] if products else None
+        return None
     
-    def get_product_by_sku(self, sku: str) -> Tuple[bool, Optional[OpenCartProduct]]:
-        """
-        Get a product by SKU.
-        
-        Args:
-            sku: Product SKU to search for
-            
-        Returns:
-            Tuple of (success, product_or_none)
-        """
-        success, products = self.search_products(search_term=sku)
-        
-        if not success:
-            return False, None
-        
-        # Look for exact SKU match
-        for product in products:
-            if product.sku.lower().strip() == sku.lower().strip():
-                return True, product
-        
-        return True, None  # No exact match found
-    
-    def create_product(self, product_data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    def create_product(self, product: OpenCartProduct) -> Optional[Dict]:
         """
         Create a new product in OpenCart.
         
         Args:
-            product_data: Product data dictionary
+            product: OpenCartProduct instance
             
         Returns:
-            Tuple of (success, product_id_or_none)
+            Dict: Created product data or None if creation failed
         """
-        # Set default values for required fields
-        default_data = {
-            'status': config.default_status,
-            'stock_status_id': config.default_stock_status,
-            'quantity': '0',
-            'model': product_data.get('name', '')[:64],  # Use name as model if not provided
-            'manufacturer_id': '0',  # Default manufacturer
-            'category_id': '0',  # Will be set by category lookup
-        }
+        product_data = product.to_dict()
+        self.logger.info(f"Creating product: {product.name} (Model: {product.model})")
         
-        # Merge with provided data
-        final_data = {**default_data, **product_data}
+        response = self._make_request('POST', '/products', data=product_data)
+        if response:
+            self.logger.info(f"Successfully created product: {product.name}")
+        else:
+            self.logger.error(f"Failed to create product: {product.name}")
         
-        success, response_data = self._make_request('POST', '', data=final_data)
-        
-        if success:
-            product_id = response_data.get('product_id') or response_data.get('data', {}).get('product_id')
-            if product_id:
-                logger.info(f"Created product: {final_data.get('name')} (ID: {product_id})")
-                return True, str(product_id)
-        
-        logger.error(f"Failed to create product: {response_data}")
-        return False, None
+        return response
     
-    def update_product(self, product_id: str, product_data: Dict[str, Any]) -> bool:
+    def update_product(self, product_id: int, product: OpenCartProduct) -> Optional[Dict]:
         """
         Update an existing product in OpenCart.
         
         Args:
-            product_id: OpenCart product ID
-            product_data: Updated product data
+            product_id: ID of the product to update
+            product: OpenCartProduct instance with updated data
             
         Returns:
-            Success status
+            Dict: Updated product data or None if update failed
         """
-        success, response_data = self._make_request('PUT', f'/{product_id}', data=product_data)
+        product_data = product.to_dict()
+        self.logger.info(f"Updating product ID {product_id}: {product.name}")
         
-        if success:
-            logger.info(f"Updated product ID: {product_id}")
-            return True
+        response = self._make_request('PUT', f'/products/{product_id}', data=product_data)
+        if response:
+            self.logger.info(f"Successfully updated product: {product.name}")
+        else:
+            self.logger.error(f"Failed to update product: {product.name}")
         
-        logger.error(f"Failed to update product {product_id}: {response_data}")
-        return False
+        return response
     
-    def delete_product(self, product_id: str) -> bool:
+    def delete_product(self, product_id: int) -> bool:
         """
         Delete a product from OpenCart.
         
         Args:
-            product_id: OpenCart product ID
+            product_id: ID of the product to delete
             
         Returns:
-            Success status
+            bool: True if deletion successful, False otherwise
         """
-        success, response_data = self._make_request('DELETE', f'/{product_id}')
+        self.logger.info(f"Deleting product ID: {product_id}")
         
-        if success:
-            logger.info(f"Deleted product ID: {product_id}")
+        response = self._make_request('DELETE', f'/products/{product_id}')
+        if response:
+            self.logger.info(f"Successfully deleted product ID: {product_id}")
             return True
-        
-        logger.error(f"Failed to delete product {product_id}: {response_data}")
-        return False
+        else:
+            self.logger.error(f"Failed to delete product ID: {product_id}")
+            return False
     
-    def get_categories(self) -> Tuple[bool, List[Dict[str, Any]]]:
+    def sync_product(self, product: OpenCartProduct) -> Tuple[bool, Optional[Dict]]:
         """
-        Get list of product categories.
-        
-        Returns:
-            Tuple of (success, list_of_categories)
-        """
-        # Note: This endpoint might need to be adjusted based on actual API
-        success, response_data = self._make_request('GET', '/categories')
-        
-        if success and isinstance(response_data, list):
-            return True, response_data
-        elif success and 'data' in response_data:
-            return True, response_data['data']
-        
-        return False, []
-    
-    def get_category_id_by_name(self, category_name: str) -> Optional[str]:
-        """
-        Get category ID by name.
+        Synchronize a product with OpenCart (create or update).
         
         Args:
-            category_name: Category name to search for
+            product: OpenCartProduct instance
             
         Returns:
-            Category ID or None if not found
+            Tuple[bool, Optional[Dict]]: (success, product_data)
         """
-        success, categories = self.get_categories()
+        # Check if product already exists
+        existing_product = self.get_product_by_model(product.model)
         
-        if not success:
-            return None
+        if existing_product:
+            # Update existing product
+            product_id = existing_product.get('product_id')
+            result = self.update_product(product_id, product)
+            return result is not None, result
+        else:
+            # Create new product
+            result = self.create_product(product)
+            return result is not None, result
+    
+    def get_manufacturers(self) -> Optional[List[Dict]]:
+        """
+        Retrieve all manufacturers from OpenCart.
         
-        for category in categories:
-            if category.get('name', '').lower() == category_name.lower():
-                return str(category.get('category_id'))
+        Returns:
+            List[Dict]: List of manufacturers or None if request failed
+        """
+        response = self._make_request('GET', '/manufacturers')
+        if response and 'data' in response:
+            return response['data']
+        return None
+    
+    def get_manufacturer_by_name(self, name: str) -> Optional[Dict]:
+        """
+        Find a manufacturer by name.
         
+        Args:
+            name: Manufacturer name to search for
+            
+        Returns:
+            Dict: Manufacturer data or None if not found
+        """
+        manufacturers = self.get_manufacturers()
+        if manufacturers:
+            for manufacturer in manufacturers:
+                if manufacturer.get('name', '').lower() == name.lower():
+                    return manufacturer
         return None
     
     def test_connection(self) -> bool:
         """
-        Test the API connection and authentication.
+        Test the connection to OpenCart API.
         
         Returns:
-            True if connection is successful
+            bool: True if connection successful, False otherwise
         """
         try:
-            success, response = self.search_products(limit=1)
-            if success:
-                logger.info("OpenCart API connection test successful")
-                return True
-            else:
-                logger.error(f"OpenCart API connection test failed: {response}")
-                return False
+            # Test with a simple product search
+            url = f"https://www.audicoonline.co.za/index.php?route=ocrestapi/product/listing&search=test"
+            response = self.session.get(url, headers=self.headers)
+            self.logger.info(f"Connection test response: {response.status_code}")
+            return response.status_code == 200
         except Exception as e:
-            logger.error(f"OpenCart API connection test error: {e}")
+            self.logger.error(f"Connection test failed: {str(e)}")
             return False

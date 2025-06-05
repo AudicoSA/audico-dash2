@@ -1,7 +1,7 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
+import { apiClient } from '@/lib/api'
+import { ServiceStatus } from '@/lib/types'
 import { 
   Settings, 
   Cloud, 
@@ -23,12 +25,14 @@ import {
   RefreshCw,
   CheckCircle,
   XCircle,
-  AlertTriangle
+  AlertTriangle,
+  Server,
+  FileText
 } from 'lucide-react'
 
 interface ConnectionTest {
   service: string
-  status: 'testing' | 'success' | 'error'
+  status: 'testing' | 'success' | 'error' | 'not_configured'
   message: string
 }
 
@@ -82,29 +86,47 @@ export default function Configuration() {
     })
   }
 
-  const testConnections = async () => {
+  const testAllConnections = async () => {
     setIsTesting(true)
     setConnectionTests([
-      { service: 'Google Cloud Storage', status: 'testing', message: 'Testing connection...' },
-      { service: 'Document AI', status: 'testing', message: 'Testing connection...' },
-      { service: 'OpenCart API', status: 'testing', message: 'Testing connection...' }
+      { service: 'Backend Service', status: 'testing', message: 'Testing backend health...' },
+      { service: 'Google Cloud Storage', status: 'testing', message: 'Testing GCS connection...' },
+      { service: 'Document AI', status: 'testing', message: 'Testing Document AI service...' },
+      { service: 'OpenCart API', status: 'testing', message: 'Testing OpenCart connection...' }
     ])
 
-    // Simulate testing each service
-    const services = ['Google Cloud Storage', 'Document AI', 'OpenCart API']
-    
-    for (let i = 0; i < services.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
+    // Test backend health first
+    try {
+      const backendResult = await apiClient.checkBackendHealth()
       setConnectionTests(prev => prev.map(test => 
-        test.service === services[i] 
+        test.service === 'Backend Service' 
           ? { 
               ...test, 
-              status: Math.random() > 0.2 ? 'success' : 'error',
-              message: Math.random() > 0.2 ? 'Connection successful' : 'Connection failed'
+              status: backendResult.success ? 'success' : 'error',
+              message: backendResult.success ? 'Backend is healthy and responding' : (backendResult.error || 'Backend connection failed')
             }
           : test
       ))
+
+      if (backendResult.success) {
+        // Test other services if backend is healthy
+        await testGCS()
+        await testDocumentAI()
+        await testOpenCart()
+      } else {
+        // Mark other services as error if backend is down
+        setConnectionTests(prev => prev.map(test => 
+          test.service !== 'Backend Service'
+            ? { ...test, status: 'error', message: 'Backend required for service testing' }
+            : test
+        ))
+      }
+    } catch (error) {
+      setConnectionTests(prev => prev.map(test => ({
+        ...test,
+        status: 'error',
+        message: test.service === 'Backend Service' ? 'Unable to reach backend' : 'Backend required for service testing'
+      })))
     }
     
     setIsTesting(false)
@@ -115,12 +137,86 @@ export default function Configuration() {
     })
   }
 
+  const testGCS = async () => {
+    try {
+      const result = await apiClient.checkGCSStatus()
+      setConnectionTests(prev => prev.map(test => 
+        test.service === 'Google Cloud Storage' 
+          ? { 
+              ...test, 
+              status: result.success ? 'success' : 'error',
+              message: result.success ? 'GCS connection successful' : (result.error || 'GCS connection failed')
+            }
+          : test
+      ))
+    } catch (error) {
+      setConnectionTests(prev => prev.map(test => 
+        test.service === 'Google Cloud Storage' 
+          ? { ...test, status: 'error', message: 'Unable to test GCS connection' }
+          : test
+      ))
+    }
+  }
+
+  const testDocumentAI = async () => {
+    try {
+      const result = await apiClient.checkDocumentAIStatus()
+      setConnectionTests(prev => prev.map(test => 
+        test.service === 'Document AI' 
+          ? { 
+              ...test, 
+              status: result.success ? 'success' : 'error',
+              message: result.success ? 'Document AI service available' : (result.error || 'Document AI service unavailable')
+            }
+          : test
+      ))
+    } catch (error) {
+      setConnectionTests(prev => prev.map(test => 
+        test.service === 'Document AI' 
+          ? { ...test, status: 'error', message: 'Unable to test Document AI service' }
+          : test
+      ))
+    }
+  }
+
+  const testOpenCart = async () => {
+    try {
+      const result = await apiClient.checkOpenCartConnection()
+      let status: 'success' | 'error' | 'not_configured' = 'error'
+      let message = 'OpenCart connection failed'
+
+      if (result.success) {
+        status = 'success'
+        message = 'OpenCart API connection successful'
+      } else if (result.error?.includes('No access token') || result.error?.includes('Authentication required')) {
+        status = 'not_configured'
+        message = 'OpenCart API not configured - missing or invalid authentication token'
+      } else {
+        message = result.error || 'OpenCart connection failed'
+      }
+
+      setConnectionTests(prev => prev.map(test => 
+        test.service === 'OpenCart API' 
+          ? { ...test, status, message }
+          : test
+      ))
+    } catch (error) {
+      setConnectionTests(prev => prev.map(test => 
+        test.service === 'OpenCart API' 
+          ? { ...test, status: 'error', message: 'Unable to test OpenCart connection' }
+          : test
+      ))
+    }
+  }
+
   const getConnectionIcon = (status: string) => {
     switch (status) {
       case 'success':
         return <CheckCircle className="h-4 w-4 text-green-500" />
       case 'error':
         return <XCircle className="h-4 w-4 text-red-500" />
+      case 'not_configured':
+        return <AlertTriangle className="h-4 w-4 text-orange-500" />
       case 'testing':
         return <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />
       default:
@@ -134,10 +230,27 @@ export default function Configuration() {
         return <Badge className="bg-green-100 text-green-800">Connected</Badge>
       case 'error':
         return <Badge className="bg-red-100 text-red-800">Failed</Badge>
+      case 'not_configured':
+        return <Badge className="bg-orange-100 text-orange-800">Not Configured</Badge>
       case 'testing':
         return <Badge className="bg-blue-100 text-blue-800">Testing</Badge>
       default:
         return <Badge className="bg-gray-100 text-gray-800">Unknown</Badge>
+    }
+  }
+
+  const getServiceIcon = (serviceName: string) => {
+    switch (serviceName) {
+      case 'Backend Service':
+        return <Server className="h-4 w-4" />
+      case 'Google Cloud Storage':
+        return <Cloud className="h-4 w-4" />
+      case 'Document AI':
+        return <FileText className="h-4 w-4" />
+      case 'OpenCart API':
+        return <ShoppingCart className="h-4 w-4" />
+      default:
+        return <Settings className="h-4 w-4" />
     }
   }
 
@@ -389,7 +502,7 @@ export default function Configuration() {
                     </>
                   )}
                 </Button>
-                <Button variant="outline" onClick={testConnections} disabled={isTesting}>
+                <Button variant="outline" onClick={testAllConnections} disabled={isTesting}>
                   {isTesting ? (
                     <>
                       <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
@@ -398,7 +511,7 @@ export default function Configuration() {
                   ) : (
                     <>
                       <TestTube className="h-4 w-4 mr-2" />
-                      Test Connections
+                      Test All Connections
                     </>
                   )}
                 </Button>
@@ -427,6 +540,7 @@ export default function Configuration() {
                     <div key={index} className="border rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
+                          {getServiceIcon(test.service)}
                           {getConnectionIcon(test.status)}
                           <span className="font-medium">{test.service}</span>
                         </div>
@@ -441,7 +555,7 @@ export default function Configuration() {
                   <TestTube className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <p className="text-lg font-medium mb-2">No tests run</p>
                   <p className="text-muted-foreground">
-                    Click "Test Connections" to check service connectivity
+                    Click "Test All Connections" to check service connectivity
                   </p>
                 </div>
               )}

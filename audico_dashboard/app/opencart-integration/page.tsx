@@ -202,7 +202,7 @@ export default function OpenCartIntegration() {
 
   const filteredProducts = existingProducts.filter(product =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.sku.toLowerCase().includes(searchTerm.toLowerCase())
+    (product.sku && product.sku.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
   const handleCreateProduct = async () => {
@@ -220,11 +220,12 @@ export default function OpenCartIntegration() {
     try {
     const productData: OpenCartProduct = {
     name: newProduct.name,
+    model: newProduct.sku, // Use SKU as model
     sku: newProduct.sku,
     price: parseFloat(newProduct.price) || 0,
     description: newProduct.description,
     category: newProduct.category,
-    category_id: newProduct.category, // Include category_id for OpenCart
+    category_id: parseInt(newProduct.category) || 0,
     stock: parseInt(newProduct.stock) || 0,
     status: 'active'
     }
@@ -237,6 +238,7 @@ export default function OpenCartIntegration() {
     product: {
     id: unwrappedResult.data?.id || Date.now().toString(),
     name: newProduct.name,
+    model: newProduct.sku,
     sku: newProduct.sku,
     price: parseFloat(newProduct.price) || 0,
     description: newProduct.description,
@@ -297,6 +299,7 @@ export default function OpenCartIntegration() {
     product: {
     id: '',
     name: newProduct.name,
+    model: newProduct.sku,
     sku: newProduct.sku,
     price: parseFloat(newProduct.price) || 0,
     description: newProduct.description,
@@ -613,7 +616,7 @@ export default function OpenCartIntegration() {
     <SelectItem value="967">Load (Default)</SelectItem>
     {safeCategories.length > 0 && (
     safeCategories.map((category) => (
-    <SelectItem key={category.id || category.category_id} value={category.category_id || category.id}>
+    <SelectItem key={category.category_id} value={category.category_id.toString()}>
     {category.name}
     </SelectItem>
     ))
@@ -675,7 +678,7 @@ export default function OpenCartIntegration() {
     <div>
     <p className="font-medium">{product.name}</p>
     <p className="text-sm text-muted-foreground">
-    {product.sku} • ${product.price} • Stock: {product.stock}
+    {product.sku} • ${product.price} • Stock: {product.stock || product.quantity || 0}
     </p>
     </div>
     <div className="flex gap-2">

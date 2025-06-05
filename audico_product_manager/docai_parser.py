@@ -1,345 +1,405 @@
-
-"""
-Google Cloud Document AI parser for extracting product data from pricelists.
-
-Handles PDF and Excel file parsing using Document AI Form Parser to extract
-structured product information including names, prices, and descriptions.
-"""
-
 import logging
 import re
-from typing import List, Dict, Any, Optional, Tuple
-from decimal import Decimal, InvalidOperation
+import os
+import json
+import time
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass, asdict
+from google.cloud import documentai
+import PyPDF2
+import io
 
-from google.cloud import documentai_v1 as documentai
-from google.cloud.exceptions import GoogleCloudError
+from openai import OpenAI
 
-from .config import config
-
-logger = logging.getLogger(__name__)
-
-class ProductData:
-    """Data class for product information."""
-    
-    def __init__(self, name: str = "", price: str = "", description: str = "", 
-                 sku: str = "", category: str = "", specifications: Dict[str, str] = None):
-        self.name = name.strip()
-        self.price = price.strip()
-        self.description = description.strip()
-        self.sku = sku.strip()
-        self.category = category.strip()
-        self.specifications = specifications or {}
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert product data to dictionary."""
-        return {
-            'name': self.name,
-            'price': self.price,
-            'description': self.description,
-            'sku': self.sku,
-            'category': self.category,
-            'specifications': self.specifications
-        }
-    
-    def is_valid(self) -> bool:
-        """Check if product data has minimum required fields."""
-        return bool(self.name and self.price)
-    
-    def clean_price(self) -> Optional[Decimal]:
-        """Extract and clean price value."""
-        if not self.price:
-            return None
-        
-        # Remove currency symbols and whitespace
-        price_clean = re.sub(r'[^\d.,]', '', self.price)
-        
-        # Handle different decimal separators
-        if ',' in price_clean and '.' in price_clean:
-            # Assume comma is thousands separator
-            price_clean = price_clean.replace(',', '')
-        elif ',' in price_clean:
-            # Assume comma is decimal separator
-            price_clean = price_clean.replace(',', '.')
-        
+try:
+    from audico_product_manager.config import config
+except ImportError:
+    try:
+        from .config import config
+    except ImportError:
         try:
-            return Decimal(price_clean)
-        except (InvalidOperation, ValueError):
-            logger.warning(f"Could not parse price: {self.price}")
-            return None
+            from config import config
+        except ImportError:
+            class FallbackConfig:
+                google_cloud_project_id = os.getenv('GOOGLE_CLOUD_PROJECT_ID', 'your-project-id')
+                google_cloud_location = os.getenv('GOOGLE_CLOUD_LOCATION', 'us')
+                google_cloud_processor_id = os.getenv('GOOGLE_CLOUD_PROCESSOR_ID', 'mock-processor-for-demo')
+                openai_api_key = os.getenv('OPENAI_API_KEY')
+                openai_client = None
+            config = FallbackConfig()
+
+@dataclass
+class ProductData:
+    name: str
+    model: str
+    price: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    manufacturer: Optional[str] = None
+    specifications: Optional[Dict[str, str]] = None
+    confidence: Optional[float] = None
+    online_store_name: Optional[str] = None
 
 class DocumentAIParser:
-    """Document AI parser for extracting product data from pricelists."""
-    
-    def __init__(self):
-        """Initialize Document AI client."""
+    def __init__(self, project_id: Optional[str] = None, location: Optional[str] = None, 
+                 processor_id: Optional[str] = None, openai_api_key: Optional[str] = None):
+        self.project_id = project_id or getattr(config, 'google_cloud_project_id', os.getenv('GOOGLE_CLOUD_PROJECT_ID', 'your-project-id'))
+        self.location = location or getattr(config, 'google_cloud_location', os.getenv('GOOGLE_CLOUD_LOCATION', 'us'))
+        self.processor_id = processor_id or getattr(config, 'google_cloud_processor_id', os.getenv('GOOGLE_CLOUD_PROCESSOR_ID', 'mock-processor-for-demo'))
+        self.logger = logging.getLogger(__name__)
+        self.openai_client = None
+        self._initialize_openai_client(openai_api_key)
+        self.documentai_client = None
+        self._initialize_documentai_client()
+
+    def _initialize_openai_client(self, api_key: Optional[str] = None):
         try:
-            # Set up client with regional endpoint
-            client_options = {"api_endpoint": config.get_document_ai_endpoint()}
-            self.client = documentai.DocumentProcessorServiceClient(
-                client_options=client_options
+            openai_key = (
+                api_key or 
+                getattr(config, 'openai_api_key', None) or 
+                os.getenv('OPENAI_API_KEY')
             )
-            
-            logger.info(f"Initialized Document AI client for location: {config.google_cloud_location}")
-            
+            if openai_key:
+                self.openai_client = OpenAI(api_key=openai_key)
+                self.logger.info("✅ OpenAI client initialized successfully")
+                print("🤖 OpenAI GPT-4 integration enabled for intelligent document parsing")
+            else:
+                self.logger.warning("⚠️ OpenAI API key not found. OpenAI parsing will be disabled.")
+                print("⚠️ OpenAI API key not found. Will use fallback parsing methods.")
         except Exception as e:
-            logger.error(f"Failed to initialize Document AI client: {e}")
-            raise
-    
-    def process_document(self, gcs_uri: str, mime_type: str = None) -> List[ProductData]:
-        """
-        Process a document from GCS and extract product data.
-        
-        Args:
-            gcs_uri: GCS URI of the document (gs://bucket/file)
-            mime_type: MIME type of the document (auto-detected if None)
-            
-        Returns:
-            List of ProductData objects extracted from the document
-        """
+            self.logger.error(f"❌ Failed to initialize OpenAI client: {str(e)}")
+            print(f"❌ OpenAI initialization failed: {str(e)}")
+            self.openai_client = None
+
+    def _initialize_documentai_client(self):
         try:
-            if not config.google_cloud_processor_id:
-                raise ValueError("Google Cloud processor ID not configured")
-            
-            # Auto-detect MIME type if not provided
-            if mime_type is None:
-                if gcs_uri.lower().endswith('.pdf'):
-                    mime_type = "application/pdf"
-                elif gcs_uri.lower().endswith(('.xlsx', '.xls')):
-                    mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                else:
-                    mime_type = "application/pdf"  # Default
-            
-            # Prepare the document for processing
-            raw_document = documentai.RawDocument(
-                content=None,  # Using GCS URI instead of content
-                mime_type=mime_type,
-                gcs_uri=gcs_uri
-            )
-            
-            # Create the process request
-            request = documentai.ProcessRequest(
-                name=config.get_processor_path(),
-                raw_document=raw_document
-            )
-            
-            # Process the document
-            logger.info(f"Processing document: {gcs_uri}")
-            result = self.client.process_document(request=request)
-            document = result.document
-            
-            # Extract product data
-            products = self._extract_products_from_document(document)
-            
-            logger.info(f"Extracted {len(products)} products from {gcs_uri}")
-            return products
-            
+            self.documentai_client = documentai.DocumentProcessorServiceClient()
+            self.logger.info("✅ Document AI client initialized successfully")
+            print("📄 Google Cloud Document AI integration enabled")
         except Exception as e:
-            logger.error(f"Failed to process document {gcs_uri}: {e}")
-            raise
-    
-    def _extract_products_from_document(self, document: documentai.Document) -> List[ProductData]:
-        """
-        Extract product data from processed document.
-        
-        Args:
-            document: Processed Document AI document
-            
-        Returns:
-            List of ProductData objects
-        """
-        products = []
-        
+            self.logger.error(f"❌ Failed to initialize Document AI client: {str(e)}")
+            print(f"⚠️ Document AI unavailable: {str(e)}")
+
+    def _get_processor_name(self) -> str:
+        return f"projects/{self.project_id}/locations/{self.location}/processors/{self.processor_id}"
+
+    def parse_document(self, document_content: bytes, mime_type: str) -> List[ProductData]:
         try:
-            # Extract from tables (primary method for structured pricelists)
-            table_products = self._extract_from_tables(document)
-            products.extend(table_products)
-            
-            # Extract from entities (fallback method)
-            if not products:
-                entity_products = self._extract_from_entities(document)
-                products.extend(entity_products)
-            
-            # Extract from key-value pairs (additional data)
-            kv_products = self._extract_from_key_value_pairs(document)
-            products.extend(kv_products)
-            
-            # Clean and validate products
-            valid_products = []
-            for product in products:
-                if product.is_valid():
-                    valid_products.append(product)
-                else:
-                    logger.debug(f"Skipping invalid product: {product.name}")
-            
-            return valid_products
-            
-        except Exception as e:
-            logger.error(f"Failed to extract products from document: {e}")
-            return []
-    
-    def _extract_from_tables(self, document: documentai.Document) -> List[ProductData]:
-        """Extract product data from tables in the document."""
-        products = []
-        
-        for page in document.pages:
-            for table in page.tables:
-                # Analyze table structure to identify columns
-                header_row = None
-                if table.header_rows:
-                    header_row = table.header_rows[0]
-                
-                # Extract column mappings
-                column_mapping = self._analyze_table_headers(header_row, document.text)
-                
-                # Extract data rows
-                for row in table.body_rows:
-                    product = self._extract_product_from_table_row(
-                        row, column_mapping, document.text
-                    )
-                    if product:
-                        products.append(product)
-        
-        return products
-    
-    def _analyze_table_headers(self, header_row, document_text: str) -> Dict[int, str]:
-        """Analyze table headers to map columns to product fields."""
-        column_mapping = {}
-        
-        if not header_row:
-            # Default column mapping for tables without headers
-            return {
-                0: 'name',
-                1: 'price',
-                2: 'description',
-                3: 'sku'
-            }
-        
-        for i, cell in enumerate(header_row.cells):
-            header_text = self._get_text_from_layout(cell.layout, document_text).lower()
-            
-            # Map common header patterns to product fields
-            if any(keyword in header_text for keyword in ['product', 'name', 'item', 'description']):
-                column_mapping[i] = 'name'
-            elif any(keyword in header_text for keyword in ['price', 'cost', 'amount', 'value']):
-                column_mapping[i] = 'price'
-            elif any(keyword in header_text for keyword in ['desc', 'detail', 'spec']):
-                column_mapping[i] = 'description'
-            elif any(keyword in header_text for keyword in ['sku', 'code', 'id', 'part']):
-                column_mapping[i] = 'sku'
-            elif any(keyword in header_text for keyword in ['category', 'type', 'class']):
-                column_mapping[i] = 'category'
-        
-        return column_mapping
-    
-    def _extract_product_from_table_row(self, row, column_mapping: Dict[int, str], 
-                                      document_text: str) -> Optional[ProductData]:
-        """Extract product data from a table row."""
-        product_data = {}
-        
-        for i, cell in enumerate(row.cells):
-            cell_text = self._get_text_from_layout(cell.layout, document_text)
-            field_name = column_mapping.get(i)
-            
-            if field_name:
-                product_data[field_name] = cell_text
-            elif i == 0 and 'name' not in product_data:
-                product_data['name'] = cell_text
-            elif i == 1 and 'price' not in product_data:
-                product_data['price'] = cell_text
-        
-        if product_data.get('name') or product_data.get('price'):
-            return ProductData(**product_data)
-        
-        return None
-    
-    def _extract_from_entities(self, document: documentai.Document) -> List[ProductData]:
-        """Extract product data from document entities."""
-        products = []
-        current_product = ProductData()
-        
-        for entity in document.entities:
-            entity_text = entity.mention_text.strip()
-            
-            if entity.type_ == "price":
-                if current_product.name:
-                    current_product.price = entity_text
-                    products.append(current_product)
-                    current_product = ProductData()
-                else:
-                    current_product.price = entity_text
-            
-            elif entity.type_ in ["product_name", "organization"]:
-                if current_product.price:
-                    products.append(current_product)
-                current_product = ProductData(name=entity_text)
-            
-            elif entity.type_ == "quantity":
-                current_product.specifications['quantity'] = entity_text
-        
-        # Add the last product if it has data
-        if current_product.name or current_product.price:
-            products.append(current_product)
-        
-        return products
-    
-    def _extract_from_key_value_pairs(self, document: documentai.Document) -> List[ProductData]:
-        """Extract product data from key-value pairs."""
-        products = []
-        
-        for page in document.pages:
-            for form_field in page.form_fields:
-                field_name = self._get_text_from_layout(
-                    form_field.field_name, document.text
-                ).lower().strip()
-                field_value = self._get_text_from_layout(
-                    form_field.field_value, document.text
-                ).strip()
-                
-                # Look for product-related key-value pairs
-                if any(keyword in field_name for keyword in ['product', 'item', 'name']):
-                    product = ProductData(name=field_value)
-                    products.append(product)
-                elif any(keyword in field_name for keyword in ['price', 'cost']):
+            print(f"\n🔍 Starting document parsing (MIME type: {mime_type})")
+            raw_text = self._extract_raw_text(document_content, mime_type)
+            if not raw_text or len(raw_text.strip()) < 50:
+                self.logger.warning("Insufficient text extracted from document")
+                print("⚠️ Insufficient text content found in document")
+                return []
+            print(f"📝 Extracted {len(raw_text)} characters of text from document")
+            if self.openai_client:
+                try:
+                    print("🤖 Attempting OpenAI GPT-4 intelligent parsing...")
+                    products = self._parse_with_gpt4(raw_text)
                     if products:
-                        products[-1].price = field_value
-        
-        return products
-    
-    def _get_text_from_layout(self, layout, document_text: str) -> str:
-        """Extract text from a layout element."""
-        if not layout or not layout.text_anchor:
+                        self.logger.info(f"Successfully extracted {len(products)} products using OpenAI GPT-4")
+                        print(f"✅ OpenAI GPT-4 successfully extracted {len(products)} products")
+                        return products
+                except Exception as e:
+                    self.logger.error(f"OpenAI parsing failed: {str(e)}")
+            if self.documentai_client and self.processor_id != 'mock-processor-for-demo':
+                try:
+                    print("📄 Attempting Google Cloud Document AI parsing...")
+                    products = self._parse_with_documentai(document_content, mime_type)
+                    if products:
+                        print(f"✅ Document AI successfully extracted {len(products)} products")
+                        return products
+                except Exception as e:
+                    self.logger.error(f"Document AI parsing failed: {str(e)}")
+            print("🔧 Using fallback regex-based parsing...")
+            products = self._parse_text_fallback(raw_text)
+            if products:
+                print(f"✅ Regex fallback successfully extracted {len(products)} products")
+            else:
+                print("❌ No products could be extracted using any method")
+            return products
+        except Exception as e:
+            self.logger.error(f"Error parsing document: {str(e)}")
+            print(f"❌ Document parsing error: {str(e)}")
+            return []
+
+    def _extract_raw_text(self, document_content: bytes, mime_type: str) -> str:
+        try:
+            if mime_type == 'application/pdf':
+                return self._extract_pdf_text(document_content)
+            elif mime_type.startswith('text/'):
+                return document_content.decode('utf-8')
+            else:
+                self.logger.warning(f"Unsupported mime type: {mime_type}")
+                return ""
+        except Exception as e:
+            self.logger.error(f"Error extracting raw text: {str(e)}")
             return ""
-        
-        text = ""
-        for segment in layout.text_anchor.text_segments:
-            start_index = int(segment.start_index) if segment.start_index else 0
-            end_index = int(segment.end_index) if segment.end_index else len(document_text)
-            text += document_text[start_index:end_index]
-        
-        return text.strip()
-    
-    def get_document_confidence(self, document: documentai.Document) -> float:
-        """Calculate overall confidence score for the document."""
-        if not document.pages:
-            return 0.0
-        
-        total_confidence = 0.0
-        confidence_count = 0
-        
-        for page in document.pages:
-            # Check table confidence
-            for table in page.tables:
-                if hasattr(table, 'detection_confidence'):
-                    total_confidence += table.detection_confidence
-                    confidence_count += 1
-            
-            # Check form field confidence
-            for form_field in page.form_fields:
-                if hasattr(form_field.field_name, 'confidence'):
-                    total_confidence += form_field.field_name.confidence
-                    confidence_count += 1
-                if hasattr(form_field.field_value, 'confidence'):
-                    total_confidence += form_field.field_value.confidence
-                    confidence_count += 1
-        
-        return total_confidence / confidence_count if confidence_count > 0 else 0.0
+
+    def _extract_pdf_text(self, pdf_content: bytes) -> str:
+        try:
+            pdf_file = io.BytesIO(pdf_content)
+            pdf_reader = PyPDF2.PdfReader(pdf_file)
+            full_text = ""
+            for page in pdf_reader.pages:
+                full_text += page.extract_text() + "\n"
+            self.logger.info(f"Extracted {len(full_text)} characters from PDF")
+            return full_text
+        except Exception as e:
+            self.logger.error(f"Error extracting PDF text: {str(e)}")
+            return ""
+
+    def _make_online_store_name(self, name: str, model: str, manufacturer: Optional[str]) -> str:
+        # Remove manufacturer/model from the start if repeated
+        base = name
+        if manufacturer and base.lower().startswith(manufacturer.lower()):
+            base = base[len(manufacturer):].strip(" -")
+        if model and base.lower().startswith(model.lower()):
+            base = base[len(model):].strip(" -")
+        special = None
+        match = re.match(r"([0-9\.]+ Ch\. [0-9]+W)", name)
+        if match:
+            special = match.group(1)
+        feature_match = re.search(r"(Bluetooth|HEOS|AirPlay|Wi[-]?Fi)", name, re.IGNORECASE)
+        feature = feature_match.group(1) if feature_match else ""
+        store_name = ""
+        if manufacturer:
+            store_name += manufacturer.strip() + " "
+        store_name += model.strip() + " "
+        store_name += base.strip()
+        if special:
+            store_name += " - " + special
+        elif feature:
+            store_name += " - " + feature
+        return " ".join(store_name.split())
+
+    def _price_to_rands(self, price: str) -> str:
+        price = re.sub(r'[\$£€]', '', price).strip()
+        price = price.replace(',', '')
+        try:
+            if price:
+                amount = float(price)
+                return f"R{amount:,.0f}" if amount.is_integer() else f"R{amount:,.2f}"
+        except Exception:
+            if not price.startswith('R'):
+                return f"R{price}"
+        if not price.startswith('R'):
+            return f"R{price}"
+        return price
+
+    def _parse_with_gpt4(self, raw_text: str) -> List[ProductData]:
+        try:
+            prompt = self._create_gpt4_prompt(raw_text)
+            response = self._call_openai_with_retries(prompt)
+            if not response:
+                return []
+            products_data = self._parse_gpt4_response(response)
+            products = []
+            for product_dict in products_data:
+                try:
+                    sku_value = product_dict.get('sku') or product_dict.get('model', '')
+                    manufacturer = product_dict.get('manufacturer') or "Denon"
+                    product = ProductData(
+                        name=product_dict.get('name', ''),
+                        model=sku_value,
+                        price=self._price_to_rands(str(product_dict.get('price', '0.00'))),
+                        description=product_dict.get('description'),
+                        category=product_dict.get('category'),
+                        manufacturer=manufacturer,
+                        specifications=product_dict.get('specifications'),
+                        confidence=product_dict.get('confidence', 0.9),
+                        online_store_name=self._make_online_store_name(product_dict.get('name', ''), sku_value, manufacturer)
+                    )
+                    if product.name and product.model:
+                        products.append(product)
+                except Exception as e:
+                    self.logger.warning(f"Error creating product from GPT-4 response: {str(e)}")
+            return products
+        except Exception as e:
+            self.logger.error(f"Error in GPT-4 parsing: {str(e)}")
+            return []
+
+    def _create_gpt4_prompt(self, raw_text: str) -> str:
+        prompt = f"""
+You are an expert at extracting structured product information from price lists, product catalogs, and technical documents. Your task is to identify and extract ALL products with their complete details.
+
+CRITICAL REQUIREMENTS:
+1. Extract EVERY product found in the document - do not skip any items
+2. Each product MUST have both a name and SKU/model number to be included
+3. SKU codes are typically alphanumeric patterns like: LUM-820-IP-BM, SM58, QSC-K12.2, XLR-100, etc.
+4. Prices must be in clean numeric format (e.g., "299.99" not "$ 299 . 99")
+5. Look for products in tables, lists, paragraphs, and any structured data
+
+EXTRACTION FIELDS (return as JSON array):
+- "sku": Product SKU/model code (string, REQUIRED)
+- "name": Full product name (string, REQUIRED)
+- "description": Detailed product description (string)
+- "price": Numeric price value (string)
+- "category": Product type (string)
+- "manufacturer": Brand/manufacturer name (string)
+- "specifications": Technical specs as key-value pairs (object)
+- "confidence": Extraction confidence 0.0-1.0 (float)
+
+RETURN FORMAT: Valid JSON array only, no explanations or additional text.
+
+TEXT TO PROCESS:
+{raw_text[:4000]}"""
+        return prompt
+
+    def _call_openai_with_retries(self, prompt: str, max_retries: int = 3) -> Optional[str]:
+        for attempt in range(max_retries):
+            try:
+                response = self.openai_client.chat.completions.create(
+                    model="gpt-4-turbo",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert data extraction assistant. Always return valid JSON."
+                        },
+                        {
+                            "role": "user", 
+                            "content": prompt
+                        }
+                    ],
+                    temperature=0.1,
+                    max_tokens=4000,
+                    response_format={"type": "json_object"}
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                self.logger.warning(f"OpenAI API call attempt {attempt + 1} failed: {str(e)}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+        return None
+
+    def _parse_gpt4_response(self, response_content: str) -> List[Dict[str, Any]]:
+        try:
+            data = json.loads(response_content)
+            if isinstance(data, list):
+                return data
+            elif isinstance(data, dict):
+                if 'products' in data:
+                    return data['products']
+                elif 'items' in data:
+                    return data['items']
+                else:
+                    return [data]
+            else:
+                return []
+        except json.JSONDecodeError:
+            return []
+
+    def _parse_with_documentai(self, document_content: bytes, mime_type: str) -> List[ProductData]:
+        request = documentai.ProcessRequest(
+            name=self._get_processor_name(),
+            raw_document=documentai.RawDocument(
+                content=document_content,
+                mime_type=mime_type
+            )
+        )
+        result = self.documentai_client.process_document(request=request)
+        document = result.document
+        products = self._extract_products_from_document(document)
+        return products
+
+    def _parse_text_fallback(self, text: str) -> List[ProductData]:
+        products = []
+        text = re.sub(r'\s+', ' ', text)
+        pattern = r'(?P<name>[\w\.\- ]+)[\s|,]+(?P<model>[A-Z0-9\-]{4,})[\s|,]+\$?(?P<price>[\d,]+\.\d+|[\d,]+)'
+        for match in re.finditer(pattern, text):
+            name = match.group('name').strip()
+            model = match.group('model').strip()
+            price = match.group('price').replace(',', '').strip()
+            manufacturer = "Denon"  # Default or parse from context if needed
+            online_store_name = self._make_online_store_name(name, model, manufacturer)
+            product = ProductData(
+                name=name,
+                model=model,
+                price=self._price_to_rands(price),
+                manufacturer=manufacturer,
+                online_store_name=online_store_name
+            )
+            products.append(product)
+        return products
+
+    def _extract_products_from_document(self, document: documentai.Document) -> List[ProductData]:
+        products = []
+        try:
+            entities = document.entities
+            for entity in entities:
+                entity_type = entity.type_
+                entity_text = entity.text_anchor.content if entity.text_anchor else ""
+                confidence = entity.confidence
+                if entity_type.lower() in ['product_name', 'name', 'title']:
+                    name = entity_text
+                elif entity_type.lower() in ['model', 'sku', 'part_number']:
+                    model = entity_text
+                elif entity_type.lower() in ['price', 'cost', 'amount']:
+                    price = entity_text
+                elif entity_type.lower() in ['manufacturer', 'brand', 'make']:
+                    manufacturer = entity_text
+                else:
+                    continue
+                if name and model:
+                    product = ProductData(
+                        name=name,
+                        model=model,
+                        price=self._price_to_rands(price),
+                        manufacturer=manufacturer,
+                        online_store_name=self._make_online_store_name(name, model, manufacturer)
+                    )
+                    products.append(product)
+        except Exception as e:
+            self.logger.error(f"Error extracting products from document: {str(e)}")
+        return products
+
+    def parse_file(self, file_path: str) -> List[ProductData]:
+        try:
+            with open(file_path, 'rb') as f:
+                content = f.read()
+            if file_path.lower().endswith('.pdf'):
+                mime_type = 'application/pdf'
+            elif file_path.lower().endswith('.txt'):
+                mime_type = 'text/plain'
+            else:
+                mime_type = 'application/octet-stream'
+            return self.parse_document(content, mime_type)
+        except Exception as e:
+            self.logger.error(f"Error parsing file {file_path}: {str(e)}")
+            return []
+
+    def products_to_dict(self, products: List[ProductData]) -> List[Dict[str, Any]]:
+        return [asdict(product) for product in products]
+
+    def test_connection(self) -> bool:
+        try:
+            if self.openai_client:
+                self.openai_client.chat.completions.create(
+                    model="gpt-4-turbo",
+                    messages=[{"role": "user", "content": "Hello"}],
+                    max_tokens=5
+                )
+                return True
+            if self.documentai_client and self.processor_id != 'mock-processor-for-demo':
+                processor_name = self._get_processor_name()
+                self.documentai_client.get_processor(name=processor_name)
+                return True
+            return True
+        except Exception:
+            return False
+
+# Example usage and testing
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    parser = DocumentAIParser()
+    if parser.test_connection():
+        print("\n✅ Parser initialized successfully and ready to process documents")
+    else:
+        print("\n❌ Parser initialization failed")
+    # Example:
+    # products = parser.parse_file("path/to/your/document.pdf")
+    # for product in products:
+    #     print(f"{product.online_store_name} | {product.model} | {product.price} | Valid")

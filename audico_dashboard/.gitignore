@@ -144,5 +144,9 @@ coverage/
 
 # React Native / Expo
 .expo/
+
+# Google credentials
+*.json
+google-credentials.json
 audico_dashboard.zip
 audico-pricelists-d6dcac3f7c31.json

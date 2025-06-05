@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Progress } from '@/components/ui/progress'
 import { useToast } from '@/hooks/use-toast'
 import { OpenCartAPI } from '@/lib/api'
-import { ParsedProduct, FileUploadResult } from '@/lib/types'
+import { ParsedProduct, FileUploadResult, ProductComparison } from '@/lib/types'
 import { 
   Upload, 
   FileText, 
@@ -24,7 +24,8 @@ import {
   Loader2,
   Wifi,
   WifiOff,
-  RefreshCw
+  RefreshCw,
+  GitCompare
 } from 'lucide-react'
 
 export default function PricelistTesting() {
@@ -32,6 +33,8 @@ export default function PricelistTesting() {
   const [selectedFile, setSelectedFile] = useState<FileUploadResult | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [backendStatus, setBackendStatus] = useState<'connected' | 'disconnected' | 'testing'>('disconnected')
+  const [comparisonResult, setComparisonResult] = useState<ProductComparison | null>(null)
+  const [isComparing, setIsComparing] = useState(false)
   const { toast } = useToast()
 
   // Test backend connection on component mount
@@ -64,6 +67,44 @@ export default function PricelistTesting() {
         description: "Unable to reach processing backend",
         variant: "destructive"
       })
+    }
+  }
+
+  const handleProductComparison = async (fileResult: FileUploadResult) => {
+    if (!fileResult.products || fileResult.products.length === 0) {
+      toast({
+        title: "No products to compare",
+        description: "The selected file has no parsed products",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setIsComparing(true)
+    try {
+      const result = await OpenCartAPI.compareProducts(fileResult.products)
+      
+      if (result.success && result.data) {
+        setComparisonResult(result.data)
+        toast({
+          title: "Comparison completed",
+          description: `Found ${result.data.summary.addCount} products to add, ${result.data.summary.updateCount} to update, ${result.data.summary.removeCount} to remove`,
+        })
+      } else {
+        toast({
+          title: "Comparison failed",
+          description: result.error || "Failed to compare products",
+          variant: "destructive"
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Comparison error",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive"
+      })
+    } finally {
+      setIsComparing(false)
     }
   }
 
@@ -322,14 +363,29 @@ export default function PricelistTesting() {
                           <span className="font-medium">{result.fileName}</span>
                         </div>
                         {result.status === 'completed' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setSelectedFile(result)}
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            View
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedFile(result)}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View
+                            </Button>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => handleProductComparison(result)}
+                              disabled={isComparing}
+                            >
+                              {isComparing ? (
+                                <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <GitCompare className="h-4 w-4 mr-1" />
+                              )}
+                              {isComparing ? 'Comparing...' : 'Send to Product Compare'}
+                            </Button>
+                          </div>
                         )}
                       </div>
                       
@@ -360,7 +416,175 @@ export default function PricelistTesting() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.2 }}
         >
-          {selectedFile ? (
+          {comparisonResult ? (
+            <Card className="bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-0 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <GitCompare className="h-5 w-5 text-purple-500" />
+                  Product Comparison Results
+                </CardTitle>
+                <CardDescription>
+                  Comparison between parsed products and existing store inventory
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {/* Summary Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <Card className="bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        {comparisonResult.summary.addCount}
+                      </div>
+                      <div className="text-sm text-green-700 dark:text-green-300">To Add</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                        {comparisonResult.summary.updateCount}
+                      </div>
+                      <div className="text-sm text-blue-700 dark:text-blue-300">To Update</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                        {comparisonResult.summary.removeCount}
+                      </div>
+                      <div className="text-sm text-red-700 dark:text-red-300">To Remove</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gray-50 dark:bg-gray-950/20 border-gray-200 dark:border-gray-800">
+                    <CardContent className="p-4 text-center">
+                      <div className="text-2xl font-bold text-gray-600 dark:text-gray-400">
+                        {comparisonResult.summary.totalParsed}
+                      </div>
+                      <div className="text-sm text-gray-700 dark:text-gray-300">Total Parsed</div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Tabs defaultValue="add" className="w-full">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="add">Products to Add ({comparisonResult.summary.addCount})</TabsTrigger>
+                    <TabsTrigger value="update">Products to Update ({comparisonResult.summary.updateCount})</TabsTrigger>
+                    <TabsTrigger value="remove">Products to Remove ({comparisonResult.summary.removeCount})</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="add" className="space-y-4">
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>SKU/Model</TableHead>
+                            <TableHead>Price</TableHead>
+                            <TableHead>Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {comparisonResult.toAdd.map((product) => (
+                            <TableRow key={product.id}>
+                              <TableCell className="font-medium">{product.name}</TableCell>
+                              <TableCell>{product.sku || product.model || '-'}</TableCell>
+                              <TableCell>${product.price}</TableCell>
+                              <TableCell>
+                                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                  New Product
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="update" className="space-y-4">
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>SKU/Model</TableHead>
+                            <TableHead>Changes</TableHead>
+                            <TableHead>Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {comparisonResult.toUpdate.map((update, index) => (
+                            <TableRow key={index}>
+                              <TableCell className="font-medium">{update.parsed.name}</TableCell>
+                              <TableCell>{update.parsed.sku || update.parsed.model || '-'}</TableCell>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  {update.differences.map((diff, i) => (
+                                    <div key={i} className="text-sm text-muted-foreground">
+                                      {diff}
+                                    </div>
+                                  ))}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                  Update Required
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="remove" className="space-y-4">
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>SKU/Model</TableHead>
+                            <TableHead>Price</TableHead>
+                            <TableHead>Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {comparisonResult.toRemove.map((product) => (
+                            <TableRow key={product.id}>
+                              <TableCell className="font-medium">{product.name}</TableCell>
+                              <TableCell>{product.sku || product.model || '-'}</TableCell>
+                              <TableCell>${product.price}</TableCell>
+                              <TableCell>
+                                <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                                  Not in Pricelist
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+
+                <div className="mt-6 flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setComparisonResult(null)}
+                  >
+                    Close Comparison
+                  </Button>
+                  <Button 
+                    variant="default"
+                    disabled
+                    className="opacity-50"
+                  >
+                    Apply Changes (Coming Soon)
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : selectedFile ? (
             <Card className="bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-0 shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
@@ -440,7 +664,7 @@ export default function PricelistTesting() {
                   </p>
                   <p className="text-muted-foreground">
                     {backendStatus === 'connected' 
-                      ? 'Upload a file and click "View" to see parsed results'
+                      ? 'Upload a file and click "View" to see parsed results or "Send to Product Compare" to analyze differences'
                       : 'Connect to backend to start processing pricelist files'
                     }
                   </p>
