@@ -149,8 +149,39 @@ class DocumentAIParser:
             self.logger.error(f"Error extracting PDF text: {str(e)}")
             return ""
 
+    def _generate_online_store_name_ai(self, name: str, model: str, manufacturer: Optional[str]) -> Optional[str]:
+        """Use OpenAI to generate a concise store-friendly name."""
+        if not self.openai_client:
+            return None
+
+        try:
+            prompt = (
+                "Create a short, SEO-friendly product name for an online store. "
+                "Start with the manufacturer and model followed by a brief descriptor. "
+                "Limit to about 12 words.\n"
+                f"Manufacturer: {manufacturer}\nModel: {model}\nDescription: {name}"
+            )
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a product naming assistant."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+                max_tokens=32,
+            )
+            ai_name = response.choices[0].message.content.strip()
+            return ai_name
+        except Exception as e:
+            self.logger.warning(f"AI name generation failed: {str(e)}")
+            return None
+
     def _make_online_store_name(self, name: str, model: str, manufacturer: Optional[str]) -> str:
         """Construct a clean, searchable product name for the online store."""
+        # First try using OpenAI for a polished name
+        ai_name = self._generate_online_store_name_ai(name, model, manufacturer)
+        if ai_name:
+            return ai_name
 
         base = name or ""
 
