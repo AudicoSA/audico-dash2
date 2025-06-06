@@ -301,14 +301,13 @@ class OpenCartAPIClient:
         return self._make_request('POST', '/categories', data=category_data)
     
     def get_products(self, search_term: str = "", limit: int = 100, page: int = 1) -> Optional[List[Dict]]:
-        """
-        Retrieve products from OpenCart using search.
-        
+        """Retrieve products from OpenCart using search.
+
         Args:
             search_term: Search term for products (empty string returns all)
-            limit: Number of products to return
-            page: Page number (for compatibility, not used in current implementation)
-            
+            limit: Unused. Reserved for future support of result limiting.
+            page: Unused. Placeholder for future pagination support.
+
         Returns:
             List[Dict]: List of products or None if request failed
         """
