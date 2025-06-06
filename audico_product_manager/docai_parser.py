@@ -150,28 +150,26 @@ class DocumentAIParser:
             return ""
 
     def _make_online_store_name(self, name: str, model: str, manufacturer: Optional[str]) -> str:
-        # Remove manufacturer/model from the start if repeated
-        base = name
+        """Construct a clean, searchable product name for the online store."""
+
+        base = name or ""
+
+        # Remove manufacturer or model if they already appear at the start
         if manufacturer and base.lower().startswith(manufacturer.lower()):
-            base = base[len(manufacturer):].strip(" -")
+            base = base[len(manufacturer):].lstrip(" -")
         if model and base.lower().startswith(model.lower()):
-            base = base[len(model):].strip(" -")
-        special = None
-        match = re.match(r"([0-9\.]+ Ch\. [0-9]+W)", name)
-        if match:
-            special = match.group(1)
-        feature_match = re.search(r"(Bluetooth|HEOS|AirPlay|Wi[-]?Fi)", name, re.IGNORECASE)
-        feature = feature_match.group(1) if feature_match else ""
-        store_name = ""
-        if manufacturer:
-            store_name += manufacturer.strip() + " "
-        store_name += model.strip() + " "
-        store_name += base.strip()
-        if special:
-            store_name += " - " + special
-        elif feature:
-            store_name += " - " + feature
-        return " ".join(store_name.split())
+            base = base[len(model):].lstrip(" -")
+
+        # Normalise common abbreviations
+        base = re.sub(r"\bCh\.", "Channel", base, flags=re.IGNORECASE)
+        base = re.sub(r"\bCh\b", "Channel", base, flags=re.IGNORECASE)
+
+        # Collapse excess whitespace
+        base = re.sub(r"\s{2,}", " ", base).strip()
+
+        parts = [p.strip() for p in [manufacturer, model, base] if p]
+        store_name = " ".join(parts)
+        return store_name
 
     def _price_to_rands(self, price: str) -> str:
         price = re.sub(r'[\$£€]', '', price).strip()
