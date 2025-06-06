@@ -323,10 +323,10 @@ TEXT TO PROCESS:
     def _extract_products_from_document(self, document: documentai.Document) -> List[ProductData]:
         products = []
         # Temporary variables to collect entity information
-        name = None
-        model = None
-        price = None
-        manufacturer = None
+        name = ""
+        model = ""
+        price = ""
+        manufacturer = ""
         try:
             entities = document.entities
             for entity in entities:
@@ -352,7 +352,7 @@ TEXT TO PROCESS:
                         online_store_name=self._make_online_store_name(name, model, manufacturer)
                     )
                     products.append(product)
-                    name = model = price = manufacturer = None
+                    name = model = price = manufacturer = ""
         except Exception as e:
             self.logger.error(f"Error extracting products from document: {str(e)}")
         return products
