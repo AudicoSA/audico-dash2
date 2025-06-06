@@ -26,6 +26,7 @@ except ImportError:
                 google_cloud_processor_id = os.getenv('GOOGLE_CLOUD_PROCESSOR_ID', 'mock-processor-for-demo')
                 openai_api_key = os.getenv('OPENAI_API_KEY')
                 openai_client = None
+                default_manufacturer = os.getenv('DEFAULT_MANUFACTURER', 'Audico')
             config = FallbackConfig()
 
 @dataclass
@@ -227,7 +228,7 @@ class DocumentAIParser:
             for product_dict in products_data:
                 try:
                     sku_value = product_dict.get('sku') or product_dict.get('model', '')
-                    manufacturer = product_dict.get('manufacturer') or "Denon"
+                    manufacturer = product_dict.get('manufacturer') or config.default_manufacturer
                     product = ProductData(
                         name=product_dict.get('name', ''),
                         model=sku_value,
@@ -339,7 +340,7 @@ TEXT TO PROCESS:
             name = match.group('name').strip()
             model = match.group('model').strip()
             price = match.group('price').replace(',', '').strip()
-            manufacturer = "Denon"  # Default or parse from context if needed
+            manufacturer = config.default_manufacturer  # Default or parse from context if needed
             online_store_name = self._make_online_store_name(name, model, manufacturer)
             product = ProductData(
                 name=name,
