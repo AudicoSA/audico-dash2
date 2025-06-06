@@ -11,21 +11,31 @@ Create a `.env` file in the `audico_product_manager` directory with the followin
 
 ```env
 # Google Cloud Configuration
+GOOGLE_CLOUD_PROJECT_ID=audico-pricelists
+GOOGLE_CLOUD_LOCATION=us
+GOOGLE_CLOUD_PROCESSOR_ID=your-processor-id
+GOOGLE_CLOUD_CREDENTIALS_PATH=C:\path\to\service-account-key.json
+# Or alternatively
 GOOGLE_APPLICATION_CREDENTIALS=C:\path\to\service-account-key.json
-GOOGLE_CLOUD_PROJECT_ID=your-project-id
-DOCUMENT_AI_PROCESSOR_ID=your-processor-id
-GCS_BUCKET_NAME=your-bucket-name
+
+# OpenAI Configuration
+OPENAI_API_KEY=your-openai-key
+
+# Google Cloud Storage
+GCS_BUCKET_NAME=audicopricelistingest
+GCS_PROCESSED_FOLDER=processed/
+GCS_ERROR_FOLDER=errors/
 
 # OpenCart Configuration
-OPENCART_BASE_URL=https://your-store.com
-OPENCART_API_USERNAME=your-api-username
-OPENCART_API_KEY=your-api-key
+OPENCART_BASE_URL=https://your-store.com/index.php?route=ocrestapi
+OPENCART_AUTH_TOKEN=your-opencart-token
 
 # System Configuration
 LOG_LEVEL=INFO
 DRY_RUN=false
-PRICE_TOLERANCE=0.01
-SIMILARITY_THRESHOLD=0.8
+BATCH_SIZE=50
+MAX_RETRIES=3
+RETRY_DELAY=5
 ```
 
 ### Google Cloud Setup
@@ -60,7 +70,7 @@ Enable the following APIs:
 2. Create a new processor
 3. Choose "Form Parser" or "Document OCR"
 4. Note the Processor ID
-5. Update `DOCUMENT_AI_PROCESSOR_ID` in .env
+5. Update `GOOGLE_CLOUD_PROCESSOR_ID` in .env
 
 ### OpenCart Configuration
 
@@ -78,8 +88,7 @@ Enable the following APIs:
 #### 3. Configure Store Settings
 Update the following in .env:
 - `OPENCART_BASE_URL`: Your store's base URL
-- `OPENCART_API_USERNAME`: API username
-- `OPENCART_API_KEY`: Generated API key
+- `OPENCART_AUTH_TOKEN`: OpenCart API authentication token
 
 ## Dashboard Configuration
 

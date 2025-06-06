@@ -91,19 +91,31 @@ Copy `audico_product_manager/.env.example` to `audico_product_manager/.env` and 
 
 ```env
 # Google Cloud Configuration
+GOOGLE_CLOUD_PROJECT_ID=audico-pricelists
+GOOGLE_CLOUD_LOCATION=us
+GOOGLE_CLOUD_PROCESSOR_ID=your-processor-id
+GOOGLE_CLOUD_CREDENTIALS_PATH=path/to/service-account-key.json
+# Or
 GOOGLE_APPLICATION_CREDENTIALS=path/to/service-account-key.json
-GOOGLE_CLOUD_PROJECT_ID=your-project-id
-DOCUMENT_AI_PROCESSOR_ID=your-processor-id
-GCS_BUCKET_NAME=your-bucket-name
+
+# OpenAI Configuration
+OPENAI_API_KEY=your-openai-key
+
+# Google Cloud Storage
+GCS_BUCKET_NAME=audicopricelistingest
+GCS_PROCESSED_FOLDER=processed/
+GCS_ERROR_FOLDER=errors/
 
 # OpenCart Configuration
-OPENCART_BASE_URL=https://your-store.com
-OPENCART_API_USERNAME=your-api-username
-OPENCART_API_KEY=your-api-key
+OPENCART_BASE_URL=https://your-store.com/index.php?route=ocrestapi
+OPENCART_AUTH_TOKEN=your-opencart-token
 
 # System Configuration
 LOG_LEVEL=INFO
 DRY_RUN=false
+BATCH_SIZE=50
+MAX_RETRIES=3
+RETRY_DELAY=5
 ```
 
 ## Running the System
