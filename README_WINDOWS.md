@@ -157,7 +157,7 @@ npm run dev
 ### 2. Core System Testing
 ```bash
 cd audico_product_manager
-python -m pytest tests/  # If tests are available
+pytest  # runs all available tests
 python orchestrator.py --dry-run  # Safe testing mode
 ```
 
