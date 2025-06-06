@@ -63,7 +63,7 @@ def test_opencart_connection():
             print("✗ No AVR products found")
         
         # Test searching for Denon products
-        print("\n2b. Testing search for 'Denon' products...")
+        print("\n2c. Testing search for 'Denon' products...")
         denon_products = client.search_products("Denon")
         if denon_products:
             print(f"✓ Found {len(denon_products)} Denon products")
