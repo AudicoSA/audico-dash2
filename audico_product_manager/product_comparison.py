@@ -1,9 +1,11 @@
 
+
 """
 Enhanced Product Comparison Logic for Audico Product Manager.
 
 This module provides intelligent product matching between parsed pricelist data
-and existing OpenCart products using multiple matching strategies.
+and existing OpenCart products using multiple matching strategies with improved
+audio equipment specific search terms and fuzzy matching.
 """
 
 import logging
@@ -63,7 +65,7 @@ class ProductMatch:
 
 
 class ProductComparator:
-    """Enhanced product comparison with intelligent matching."""
+    """Enhanced product comparison with intelligent matching for audio equipment."""
     
     def __init__(self, opencart_client: OpenCartAPIClient):
         """
@@ -77,19 +79,45 @@ class ProductComparator:
         self.existing_products = []
         self.existing_products_loaded = False
         
-        # Matching thresholds
-        self.fuzzy_threshold = 0.8
-        self.partial_threshold = 0.6
+        # Enhanced matching thresholds for audio equipment
+        self.fuzzy_threshold = 0.75  # Lowered for better audio equipment matching
+        self.partial_threshold = 0.55  # Lowered for better partial matches
+        
+        # Enhanced model extraction patterns for audio equipment
         self.model_extraction_patterns = [
-            r'([A-Z]{2,}-[A-Z0-9]{3,})',  # AVR-S540H, AVR-X1800H
+            # Denon specific patterns
+            r'(AVR[X]?[-_]?[A-Z]?\d{3,4}[A-Z]*[BT]*)',  # AVR-X1800H, AVRX-580BT
+            r'(AVC[-_][A-Z]?\d{3,4}[A-Z]*)',  # AVC-X3800H
+            # General audio patterns
+            r'([A-Z]{2,}-[A-Z0-9]{3,})',  # AVR-S540H, QSC-K12
             r'([A-Z]{3,}\d{3,}[A-Z]*)',   # AVR540H, SM150PRO
             r'([A-Z]+[-_]\d+[-_]?[A-Z]*)', # AUD-XM-2000, SM-150-PRO
             r'(\b[A-Z]{2,}\d{2,}\b)',     # XM2000, SM150
+            # Professional audio patterns
+            r'([A-Z]+\d+[A-Z]*[-_]?[A-Z]*)', # SM58, Beta57A
+            r'([A-Z]{2,}[-_]?\d{2,}[-_]?[A-Z]*)', # QSC-K12, JBL-EON615
+        ]
+        
+        # Expanded audio equipment search terms
+        self.audio_search_terms = [
+            "", "Denon", "AKG", "Audio", "Speaker", "Amplifier", "Receiver", "DJ", "Polk", "Alpha",
+            # Audio brands
+            "JBL", "QSC", "Yamaha", "Pioneer", "Sony", "Marantz", "Onkyo", "Harman", "Shure",
+            "Sennheiser", "Audio-Technica", "Behringer", "Mackie", "PreSonus", "Focusrite",
+            # Product categories
+            "Microphone", "Headphones", "Subwoofer", "Monitor", "Mixer", "Interface", "Preamp",
+            "Turntable", "CDJ", "Controller", "Synthesizer", "Keyboard", "Studio", "Live",
+            # Audio terms
+            "Channel", "Wireless", "Bluetooth", "USB", "XLR", "TRS", "Phantom", "Condenser",
+            "Dynamic", "Ribbon", "Cardioid", "Omnidirectional", "Shotgun", "Lavalier",
+            # AV terms
+            "HDMI", "4K", "8K", "Dolby", "DTS", "Atmos", "Surround", "Theater", "Cinema",
+            "Streaming", "Network", "WiFi", "Ethernet", "Optical", "Coaxial", "Analog"
         ]
     
     def load_existing_products(self, force_reload: bool = False) -> bool:
         """
-        Load existing products from OpenCart.
+        Load existing products from OpenCart with enhanced audio equipment search.
         
         Args:
             force_reload: Force reload even if already loaded
@@ -101,22 +129,20 @@ class ProductComparator:
             return True
         
         try:
-            self.logger.info("Loading existing products from OpenCart...")
+            self.logger.info("Loading existing products from OpenCart with enhanced audio search...")
             
             # Test connection first
             if not self.opencart_client.test_connection():
-                self.logger.warning("OpenCart connection failed, using mock data for testing")
-                self.existing_products = self._get_mock_products()
+                self.logger.warning("OpenCart connection failed, using enhanced mock data for testing")
+                self.existing_products = self._get_enhanced_mock_products()
                 self.existing_products_loaded = True
                 return True
             
-            # Fetch products using multiple search terms to get a comprehensive list
-            # Since empty search doesn't return all products, we'll search for common brands/terms
-            search_terms = ["", "Denon", "AKG", "Audio", "Speaker", "Amplifier", "Receiver", "DJ", "Polk", "Alpha"]
+            # Fetch products using expanded audio equipment search terms
             all_products = []
             seen_product_ids = set()
             
-            for term in search_terms:
+            for term in self.audio_search_terms:
                 try:
                     products = self.opencart_client.search_products(term)
                     if products:
@@ -135,30 +161,30 @@ class ProductComparator:
                 self.logger.info(f"Successfully loaded {len(all_products)} unique products from OpenCart")
                 self.existing_products = all_products
                 self.existing_products_loaded = True
-                self.logger.info(f"Successfully loaded {len(self.existing_products)} existing products")
                 return True
             else:
-                self.logger.warning("No products found in OpenCart, using mock data")
-                self.existing_products = self._get_mock_products()
+                self.logger.warning("No products found in OpenCart, using enhanced mock data")
+                self.existing_products = self._get_enhanced_mock_products()
                 self.existing_products_loaded = True
                 return True
             
         except Exception as e:
             self.logger.error(f"Error loading existing products: {str(e)}")
-            # Fallback to mock data for testing
-            self.logger.info("Using mock data as fallback")
-            self.existing_products = self._get_mock_products()
+            # Fallback to enhanced mock data for testing
+            self.logger.info("Using enhanced mock data as fallback")
+            self.existing_products = self._get_enhanced_mock_products()
             self.existing_products_loaded = True
             return True
     
-    def _get_mock_products(self) -> List[Dict[str, Any]]:
+    def _get_enhanced_mock_products(self) -> List[Dict[str, Any]]:
         """
-        Get mock products for testing when OpenCart is unavailable.
+        Get enhanced mock products for testing with more audio equipment variety.
         
         Returns:
-            List[Dict[str, Any]]: Mock product data
+            List[Dict[str, Any]]: Enhanced mock product data
         """
         return [
+            # Denon AV Receivers
             {
                 'product_id': '1',
                 'name': 'Denon AVR-S540H 5.2 Channel AV Receiver',
@@ -198,12 +224,70 @@ class ProductComparator:
                 'sku': 'DENON-AVR-X3800H',
                 'price': '34999.00',
                 'description': 'Denon AVR-X3800H 9.2 Channel AV Receiver Premium Model'
+            },
+            {
+                'product_id': '6',
+                'name': 'Denon AVRX-580BT 5.2 Channel AV Receiver',
+                'model': 'AVRX-580BT',
+                'sku': 'DENON-AVRX-580BT',
+                'price': '7999.00',
+                'description': 'Denon AVRX-580BT 5.2 Channel AV Receiver with Bluetooth'
+            },
+            {
+                'product_id': '7',
+                'name': 'Denon AVC-X3800H 9.2 Channel AV Processor',
+                'model': 'AVC-X3800H',
+                'sku': 'DENON-AVC-X3800H',
+                'price': '45999.00',
+                'description': 'Denon AVC-X3800H 9.2 Channel AV Processor Premium'
+            },
+            # Professional Audio Equipment
+            {
+                'product_id': '8',
+                'name': 'Shure SM58 Dynamic Microphone',
+                'model': 'SM58',
+                'sku': 'SHURE-SM58',
+                'price': '1899.00',
+                'description': 'Shure SM58 Professional Dynamic Vocal Microphone'
+            },
+            {
+                'product_id': '9',
+                'name': 'AKG C414 XLS Condenser Microphone',
+                'model': 'C414-XLS',
+                'sku': 'AKG-C414-XLS',
+                'price': '15999.00',
+                'description': 'AKG C414 XLS Large Diaphragm Condenser Microphone'
+            },
+            {
+                'product_id': '10',
+                'name': 'QSC K12.2 Active Speaker',
+                'model': 'K12.2',
+                'sku': 'QSC-K12.2',
+                'price': '12999.00',
+                'description': 'QSC K12.2 2000W 12-inch Powered Speaker'
+            },
+            # DJ Equipment
+            {
+                'product_id': '11',
+                'name': 'Pioneer CDJ-3000 Professional DJ Player',
+                'model': 'CDJ-3000',
+                'sku': 'PIONEER-CDJ-3000',
+                'price': '35999.00',
+                'description': 'Pioneer CDJ-3000 Professional Multi Player'
+            },
+            {
+                'product_id': '12',
+                'name': 'Pioneer DJM-900NXS2 DJ Mixer',
+                'model': 'DJM-900NXS2',
+                'sku': 'PIONEER-DJM-900NXS2',
+                'price': '28999.00',
+                'description': 'Pioneer DJM-900NXS2 4-Channel Professional DJ Mixer'
             }
         ]
     
     def normalize_text(self, text: str) -> str:
         """
-        Normalize text for comparison.
+        Enhanced text normalization for audio equipment.
         
         Args:
             text: Text to normalize
@@ -221,6 +305,27 @@ class ProductComparator:
         text = unicodedata.normalize('NFKD', text)
         text = ''.join(c for c in text if not unicodedata.combining(c))
         
+        # Audio equipment specific normalizations
+        audio_normalizations = {
+            r'\bch\b': 'channel',
+            r'\bch\.': 'channel',
+            r'\bamp\b': 'amplifier',
+            r'\brec\b': 'receiver',
+            r'\bspeaker\b': 'speaker',
+            r'\bsub\b': 'subwoofer',
+            r'\bbt\b': 'bluetooth',
+            r'\bwifi\b': 'wifi',
+            r'\bhdmi\b': 'hdmi',
+            r'\b4k\b': '4k',
+            r'\b8k\b': '8k',
+            r'\bav\s+receiver\b': 'av receiver',
+            r'\bhome\s+theater\b': 'home theater',
+            r'\bsurround\s+sound\b': 'surround sound'
+        }
+        
+        for pattern, replacement in audio_normalizations.items():
+            text = re.sub(pattern, replacement, text)
+        
         # Remove extra whitespace and special characters
         text = re.sub(r'[^\w\s-]', ' ', text)
         text = re.sub(r'\s+', ' ', text)
@@ -230,7 +335,7 @@ class ProductComparator:
     
     def extract_model_number(self, text: str) -> Optional[str]:
         """
-        Extract model number from text using various patterns.
+        Enhanced model number extraction for audio equipment.
         
         Args:
             text: Text to extract model from
@@ -244,13 +349,16 @@ class ProductComparator:
         for pattern in self.model_extraction_patterns:
             match = re.search(pattern, text.upper())
             if match:
-                return match.group(1)
+                model = match.group(1)
+                # Validate model length and format
+                if len(model) >= 3 and re.search(r'[A-Z].*\d|^\d.*[A-Z]', model):
+                    return model
         
         return None
     
     def calculate_similarity(self, text1: str, text2: str) -> float:
         """
-        Calculate similarity between two text strings.
+        Enhanced similarity calculation with audio equipment specific weighting.
         
         Args:
             text1: First text
@@ -267,11 +375,74 @@ class ProductComparator:
         norm_text2 = self.normalize_text(text2)
         
         # Calculate sequence similarity
-        return SequenceMatcher(None, norm_text1, norm_text2).ratio()
+        base_similarity = SequenceMatcher(None, norm_text1, norm_text2).ratio()
+        
+        # Boost similarity for audio equipment specific terms
+        audio_terms = ['receiver', 'amplifier', 'speaker', 'microphone', 'channel', 'dolby', 'dts', 'hdmi']
+        common_audio_terms = sum(1 for term in audio_terms if term in norm_text1 and term in norm_text2)
+        
+        # Apply boost for common audio terms
+        if common_audio_terms > 0:
+            boost = min(0.1, common_audio_terms * 0.03)  # Max 10% boost
+            base_similarity = min(1.0, base_similarity + boost)
+        
+        return base_similarity
+    
+    def calculate_confidence_score(self, match_type: MatchType, similarity: float, 
+                                 parsed_product: Dict[str, Any], existing_product: Dict[str, Any]) -> float:
+        """
+        Calculate enhanced confidence score with audio equipment specific factors.
+        
+        Args:
+            match_type: Type of match found
+            similarity: Base similarity score
+            parsed_product: Parsed product data
+            existing_product: Existing product data
+            
+        Returns:
+            float: Enhanced confidence score
+        """
+        base_confidence = similarity
+        
+        # Match type bonuses
+        match_bonuses = {
+            MatchType.EXACT_SKU: 1.0,
+            MatchType.EXACT_MODEL: 0.95,
+            MatchType.MODEL_EXTRACTED: 0.9,
+            MatchType.FUZZY_NAME: similarity,
+            MatchType.PARTIAL_MATCH: similarity * 0.8,
+            MatchType.NO_MATCH: 0.0
+        }
+        
+        confidence = match_bonuses.get(match_type, similarity)
+        
+        # Additional confidence factors for audio equipment
+        parsed_name = parsed_product.get('name', '').lower()
+        existing_name = existing_product.get('name', '').lower()
+        
+        # Manufacturer consistency bonus
+        parsed_manufacturer = parsed_product.get('manufacturer', '').lower()
+        if parsed_manufacturer and parsed_manufacturer in existing_name:
+            confidence = min(1.0, confidence + 0.05)
+        
+        # Audio category consistency bonus
+        audio_categories = ['receiver', 'amplifier', 'speaker', 'microphone', 'mixer', 'player']
+        for category in audio_categories:
+            if category in parsed_name and category in existing_name:
+                confidence = min(1.0, confidence + 0.03)
+                break
+        
+        # Channel configuration consistency bonus
+        parsed_channels = re.search(r'(\d+\.?\d*)\s*ch', parsed_name)
+        existing_channels = re.search(r'(\d+\.?\d*)\s*ch', existing_name)
+        if parsed_channels and existing_channels and parsed_channels.group(1) == existing_channels.group(1):
+            confidence = min(1.0, confidence + 0.05)
+        
+        return confidence
     
     def find_best_match(self, parsed_product: Dict[str, Any]) -> ProductMatch:
         """
-        Find the best match for a parsed product.
+        Find the best match for a parsed product with enhanced audio equipment matching.
         
         Args:
             parsed_product: Parsed product data
@@ -294,7 +465,49 @@ class ProductComparator:
         
         self.logger.debug(f"Finding match for: {parsed_name} (Model: {parsed_model}, SKU: {parsed_sku})")
         
-        for existing_product in self.existing_products:
+        # ENHANCED: Search for specific product model/name if not found in pre-loaded products
+        specific_search_products = []
+        search_terms = []
+        
+        # Add specific search terms from the parsed product
+        if parsed_model and len(parsed_model.strip()) > 2:
+            search_terms.append(parsed_model.strip())
+        if parsed_sku and len(parsed_sku.strip()) > 2:
+            search_terms.append(parsed_sku.strip())
+        
+        # Extract model numbers from name for additional searches
+        extracted_model = self.extract_model_number(parsed_name)
+        if extracted_model and extracted_model not in search_terms:
+            search_terms.append(extracted_model)
+        
+        # Perform specific searches for this product
+        for search_term in search_terms:
+            try:
+                self.logger.info(f"Searching OpenCart for specific term: '{search_term}'")
+                products = self.opencart_client.search_products(search_term)
+                if products:
+                    self.logger.info(f"Found {len(products)} products for '{search_term}'")
+                    for product in products:
+                        # Avoid duplicates by checking product_id
+                        product_id = product.get('product_id')
+                        if not any(p.get('product_id') == product_id for p in specific_search_products):
+                            specific_search_products.append(product)
+                else:
+                    self.logger.info(f"No products found for '{search_term}'")
+            except Exception as e:
+                self.logger.warning(f"Error searching for '{search_term}': {str(e)}")
+        
+        # Combine pre-loaded products with specific search results
+        all_products_to_check = list(self.existing_products)
+        for product in specific_search_products:
+            # Avoid duplicates
+            product_id = product.get('product_id')
+            if not any(p.get('product_id') == product_id for p in all_products_to_check):
+                all_products_to_check.append(product)
+        
+        self.logger.info(f"Checking against {len(all_products_to_check)} total products ({len(self.existing_products)} pre-loaded + {len(specific_search_products)} from specific search)")
+        
+        for existing_product in all_products_to_check:
             existing_name = existing_product.get('name', '')
             existing_model = existing_product.get('model', '')
             existing_sku = existing_product.get('sku', '')
@@ -321,7 +534,7 @@ class ProductComparator:
                 match_info['scores']['model_exact'] = 1.0
                 self.logger.debug(f"Exact model match: {parsed_model} == {existing_model}")
             
-            # 3. Model extraction and comparison
+            # 3. Enhanced model extraction and comparison
             elif parsed_model or existing_model:
                 parsed_extracted = self.extract_model_number(parsed_name) or self.extract_model_number(parsed_model)
                 existing_extracted = self.extract_model_number(existing_name) or self.extract_model_number(existing_model)
@@ -333,7 +546,7 @@ class ProductComparator:
                         match_info['scores']['model_extracted'] = 1.0
                         self.logger.debug(f"Extracted model match: {parsed_extracted} == {existing_extracted}")
             
-            # 4. Fuzzy name matching
+            # 4. Enhanced fuzzy name matching
             if match_info['total_score'] < 0.8:  # Only if no strong match found
                 name_similarity = self.calculate_similarity(parsed_name, existing_name)
                 match_info['scores']['name_similarity'] = name_similarity
@@ -347,6 +560,14 @@ class ProductComparator:
                     match_info['total_score'] = name_similarity
                     self.logger.debug(f"Partial match: {name_similarity:.2f} - '{parsed_name}' vs '{existing_name}'")
             
+            # Calculate enhanced confidence score
+            if match_info['total_score'] > 0:
+                enhanced_confidence = self.calculate_confidence_score(
+                    match_info['match_type'], match_info['total_score'], 
+                    parsed_product, existing_product
+                )
+                match_info['total_score'] = enhanced_confidence
+            
             debug_matches.append(match_info)
             
             # Update best match
@@ -355,12 +576,12 @@ class ProductComparator:
                 best_match = existing_product
                 best_match_type = match_info['match_type']
         
-        # Determine confidence level
-        if best_score >= 0.9:
+        # Determine confidence level with adjusted thresholds
+        if best_score >= 0.85:  # Lowered from 0.9
             confidence_level = MatchConfidence.HIGH
-        elif best_score >= 0.7:
+        elif best_score >= 0.65:  # Lowered from 0.7
             confidence_level = MatchConfidence.MEDIUM
-        elif best_score >= 0.5:
+        elif best_score >= 0.45:  # Lowered from 0.5
             confidence_level = MatchConfidence.LOW
         else:
             confidence_level = MatchConfidence.NONE
@@ -402,7 +623,7 @@ class ProductComparator:
     
     def _parse_price(self, price_value: Any) -> Optional[float]:
         """
-        Parse price value to float.
+        Enhanced price parsing for various formats.
         
         Args:
             price_value: Price value to parse
@@ -449,7 +670,7 @@ class ProductComparator:
     
     def _determine_action(self, existing_product: Optional[Dict], score: float, parsed_product: Dict) -> str:
         """
-        Determine what action to take for a product.
+        Determine what action to take for a product with enhanced logic.
         
         Args:
             existing_product: Existing product if found
@@ -467,12 +688,12 @@ class ProductComparator:
         if not parsed_price or parsed_price <= 0:
             return 'skip'
         
-        # If high confidence match found, update
-        if existing_product and score >= 0.8:
+        # If high confidence match found, update (lowered threshold)
+        if existing_product and score >= 0.7:  # Lowered from 0.8
             return 'update'
         
-        # If medium confidence match, might want manual review (for now, update)
-        if existing_product and score >= 0.6:
+        # If medium confidence match, update (lowered threshold)
+        if existing_product and score >= 0.5:  # Lowered from 0.6
             return 'update'
         
         # If low or no match, create new product
@@ -506,16 +727,16 @@ class ProductComparator:
         if not parsed_product.get('description'):
             issues.append('Missing product description')
         
-        # Check for match quality issues
+        # Check for match quality issues (adjusted thresholds)
         if existing_product:
-            if score < 0.8:
+            if score < 0.7:  # Lowered from 0.8
                 issues.append(f'Low match confidence ({score:.1%})')
             
             # Check for significant price differences
             existing_price = self._parse_price(existing_product.get('price', 0))
             if parsed_price and existing_price:
                 price_diff_percent = abs(parsed_price - existing_price) / existing_price
-                if price_diff_percent > 0.2:  # 20% difference
+                if price_diff_percent > 0.25:  # Increased from 20% to 25%
                     issues.append(f'Significant price difference ({price_diff_percent:.1%})')
             
             # Check for model/SKU mismatches
@@ -539,7 +760,7 @@ class ProductComparator:
         Returns:
             List[ProductMatch]: List of product matches
         """
-        self.logger.info(f"Starting comparison of {len(parsed_products)} parsed products")
+        self.logger.info(f"Starting enhanced comparison of {len(parsed_products)} parsed products")
         
         # Ensure existing products are loaded
         if not self.load_existing_products():
